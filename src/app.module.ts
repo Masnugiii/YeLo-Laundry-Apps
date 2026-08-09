@@ -26,6 +26,8 @@ import { PermissionModule } from './permission/permission.module';
 import { RbacModule } from './rbac/rbac.module';
 import { HealthModule } from './modules/health/health.module';
 import { SettingsModule } from './settings/settings.module';
+import { MasterDataModule } from './master-data/master-data.module';
+import { NumberingModule } from './numbering/numbering.module';
 
 @Module({
   imports: [
@@ -51,6 +53,8 @@ import { SettingsModule } from './settings/settings.module';
     ReportsModule,
     PermissionModule,
     SettingsModule,
+    MasterDataModule,
+    NumberingModule,
   ],
   providers: [
     {

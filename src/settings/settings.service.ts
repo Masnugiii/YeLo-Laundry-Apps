@@ -164,12 +164,15 @@ export class SettingsService {
           message: 'Document rules will be available in a future release',
         };
       case 'numbering': {
+        const sequences = await this.prisma.numberingSequence.findMany({
+          orderBy: { type: 'asc' },
+        });
         const queue = await this.prisma.queueSetting.findFirst({
           orderBy: { createdAt: 'asc' },
         });
         return {
+          sequences,
           queue,
-          message: 'Unified business numbering will be available in a future release',
         };
       }
       default:

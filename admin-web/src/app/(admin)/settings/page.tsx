@@ -1,74 +1,38 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button } from "@/components/ui/button";
+import Link from "next/link";
 import { Card, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { apiGet, apiPatch } from "@/lib/api";
 
-interface CompanySettings {
-  companyName: string;
-  phone: string | null;
-  email: string | null;
-  address: string | null;
-  logoUrl: string | null;
-  businessHours: string | null;
-  timezone: string | null;
-  currency: string | null;
-  taxRate: number | null;
-}
+const sections = [
+  { href: "/settings/services", title: "Services", description: "Laundry service catalog" },
+  { href: "/settings/pricing", title: "Pricing", description: "Active service prices" },
+  { href: "/settings/numbering", title: "Business Numbering", description: "ORD, INV, EXP, PAY, CST, EMP" },
+  { href: "/settings/payment-methods", title: "Payment Methods", description: "Cash, QRIS, transfer, wallet" },
+  { href: "/settings/expense-categories", title: "Expense Categories", description: "Expense classification master data" },
+  { href: "/settings/loyalty", title: "Loyalty", description: "Points, membership, vouchers" },
+  { href: "/finance/payroll/settings", title: "Payroll Rules", description: "Salary calculation settings" },
+];
 
 export default function SettingsPage() {
-  const queryClient = useQueryClient();
-  const { data } = useQuery({
-    queryKey: ["company-settings"],
-    queryFn: () => apiGet<CompanySettings>("/admin/settings/company"),
-  });
-
-  const save = useMutation({
-    mutationFn: (body: Partial<CompanySettings>) =>
-      apiPatch<CompanySettings>("/admin/settings/company", body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["company-settings"] }),
-  });
-
-  if (!data) return <p>Loading settings...</p>;
-
   return (
-    <Card>
-      <CardTitle>System Settings</CardTitle>
-      <div className="mt-4 grid gap-3 md:grid-cols-2">
-        {(
-          [
-            ["companyName", "Company Name"],
-            ["phone", "Phone"],
-            ["email", "Email"],
-            ["address", "Address"],
-            ["logoUrl", "Logo URL"],
-            ["businessHours", "Business Hours"],
-            ["timezone", "Timezone"],
-            ["currency", "Currency"],
-          ] as const
-        ).map(([key, label]) => (
-          <div key={key}>
-            <label className="mb-1 block text-sm">{label}</label>
-            <Input
-              value={String(data[key] ?? "")}
-              onChange={(e) => save.mutate({ [key]: e.target.value })}
-            />
-          </div>
-        ))}
-        <div>
-          <label className="mb-1 block text-sm">Tax Rate (%)</label>
-          <Input
-            type="number"
-            value={data.taxRate ?? 0}
-            onChange={(e) => save.mutate({ taxRate: Number(e.target.value) })}
-          />
-        </div>
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-semibold">System Settings</h2>
+        <p className="text-sm text-slate-500">
+          Manage master data and configuration used across ERP modules.
+        </p>
       </div>
-      <Button className="mt-4" variant="outline" onClick={() => save.mutate(data)}>
-        Save Settings
-      </Button>
-    </Card>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {sections.map((section) => (
+          <Link key={section.href} href={section.href}>
+            <Card className="h-full transition hover:border-blue-200 hover:shadow-md">
+              <CardTitle>{section.title}</CardTitle>
+              <p className="mt-2 text-sm text-slate-500">{section.description}</p>
+            </Card>
+          </Link>
+        ))}
+      </div>
+    </div>
   );
 }

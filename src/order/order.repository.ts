@@ -6,17 +6,13 @@ import {
   TimelineType,
 } from '@prisma/client';
 import { PrismaService } from '../database/prisma/prisma.service';
+import { NumberingService } from '../numbering/numbering.service';
 import { OrderQueryDto } from './dto/order-query.dto';
 import {
   orderDetailSelect,
   orderListSelect,
   OrderDetailRecord,
 } from './order.select';
-import {
-  buildInvoicePrefix,
-  formatInvoiceNumber,
-  parseInvoiceSequence,
-} from './utils/order-number.util';
 
 export interface CreateOrderItemInput {
   serviceId: string;
@@ -43,7 +39,10 @@ export interface CreateOrderInput {
 
 @Injectable()
 export class OrderRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly numberingService: NumberingService,
+  ) {}
 
   findMany(query: OrderQueryDto) {
     const page = query.page ?? 1;
@@ -117,7 +116,7 @@ export class OrderRepository {
 
   createOrder(input: CreateOrderInput): Promise<OrderDetailRecord> {
     return this.prisma.$transaction(async (tx) => {
-      const invoiceNumber = await this.generateInvoiceNumber(tx);
+      const invoiceNumber = await this.numberingService.generateNumber('ORD', tx);
       const queueNumber = await this.generateQueueNumber(tx);
 
       const order = await tx.order.create({
@@ -367,21 +366,6 @@ export class OrderRepository {
       revenueThisMonth,
       averageTicket,
     };
-  }
-
-  private async generateInvoiceNumber(tx: Prisma.TransactionClient) {
-    const prefix = buildInvoicePrefix();
-    const latest = await tx.order.findFirst({
-      where: { invoiceNumber: { startsWith: prefix } },
-      orderBy: { invoiceNumber: 'desc' },
-      select: { invoiceNumber: true },
-    });
-
-    const latestSequence = latest?.invoiceNumber
-      ? parseInvoiceSequence(latest.invoiceNumber, prefix)
-      : null;
-
-    return formatInvoiceNumber((latestSequence ?? 0) + 1);
   }
 
   private async generateQueueNumber(tx: Prisma.TransactionClient) {

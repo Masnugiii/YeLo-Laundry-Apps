@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { CustomerModule } from '../customer/customer.module';
 import { NotificationModule } from '../notification/notification.module';
 import { OrderModule } from '../order/order.module';
+import { NumberingModule } from '../numbering/numbering.module';
 import { CashController } from './cash.controller';
 import { CashService } from './cash.service';
 import { ExpenseController } from './expense.controller';
@@ -18,7 +19,7 @@ import { ReportController } from './report.controller';
 import { ReportService } from './report.service';
 
 @Module({
-  imports: [CustomerModule, OrderModule, NotificationModule],
+  imports: [CustomerModule, OrderModule, NotificationModule, NumberingModule],
   controllers: [
     PaymentController,
     InvoiceController,

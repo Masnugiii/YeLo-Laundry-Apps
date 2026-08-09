@@ -1,20 +1,20 @@
 import { Injectable } from '@nestjs/common';
 import { OrderStatus, PaymentStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma/prisma.service';
+import { NumberingService } from '../numbering/numbering.service';
 import { CustomerQueryDto, CustomerSortField, SortOrder } from './dto/customer-query.dto';
 import {
   customerDetailSelect,
   customerListSelect,
   customerSearchSelect,
 } from './customer.select';
-import {
-  formatCustomerCode,
-  parseCustomerCodeSequence,
-} from './utils/customer-code.util';
 
 @Injectable()
 export class CustomerRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly numberingService: NumberingService,
+  ) {}
 
   findMany(query: CustomerQueryDto) {
     const page = query.page ?? 1;
@@ -312,13 +312,8 @@ export class CustomerRepository {
     });
   }
 
-  async generateNextCustomerCode(): Promise<string> {
-    const latest = await this.findLatestCustomerCode();
-    const latestSequence = latest
-      ? parseCustomerCodeSequence(latest.customerCode)
-      : null;
-
-    return formatCustomerCode((latestSequence ?? 0) + 1);
+  async generateNextCustomerCode() {
+    return this.numberingService.generateNumber('CST');
   }
 
   private buildOrderBy(

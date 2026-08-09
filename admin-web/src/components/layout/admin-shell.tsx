@@ -39,6 +39,11 @@ const titleMap: Record<string, string> = {
   "/audit-log": "Audit Log",
   "/notifications": "Notifications",
   "/settings": "Settings",
+  "/settings/services": "Services",
+  "/settings/pricing": "Pricing",
+  "/settings/numbering": "Business Numbering",
+  "/settings/payment-methods": "Payment Methods",
+  "/settings/expense-categories": "Expense Categories",
   "/settings/loyalty": "Loyalty Settings",
 };
 

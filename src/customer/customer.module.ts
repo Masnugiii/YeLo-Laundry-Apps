@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { NumberingModule } from '../numbering/numbering.module';
 import { CustomerAddressController } from './customer-address.controller';
 import { CustomerAddressRepository } from './customer-address.repository';
 import { CustomerAddressService } from './customer-address.service';
@@ -18,6 +19,7 @@ import { CustomerRepository } from './customer.repository';
 import { CustomerService } from './customer.service';
 
 @Module({
+  imports: [NumberingModule],
   controllers: [
     CustomerController,
     CustomerAddressController,

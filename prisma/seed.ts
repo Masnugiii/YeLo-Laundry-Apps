@@ -4,6 +4,7 @@ import {
   seedDefaultAttendanceSetting,
   seedDefaultServicePrices,
 } from './seed-settings.helpers';
+import { seedDefaultNumberingSequences } from './seed-numbering.helpers';
 
 const prisma = new PrismaClient();
 
@@ -246,6 +247,7 @@ async function main() {
       SERVICES.map((service) => service.serviceCode),
     );
     await seedDefaultAttendanceSetting(tx);
+    await seedDefaultNumberingSequences(tx);
 
     const existingQueue = await tx.queueSetting.findFirst();
     if (existingQueue) {

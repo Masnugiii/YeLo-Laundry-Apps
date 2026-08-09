@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma/prisma.service';
+import { NumberingService } from '../numbering/numbering.service';
+import { NumberingType } from '../numbering/numbering.types';
 import {
   buildFinanceReferencePrefix,
   FinanceReferenceKind,
@@ -29,68 +31,38 @@ import {
 
 @Injectable()
 export class FinanceSettingsRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly numberingService: NumberingService,
+  ) {}
 
   async generateReferenceNumber(
     kind: FinanceReferenceKind,
     tx?: Prisma.TransactionClient,
     date = new Date(),
   ): Promise<string> {
+    const numberingMap: Partial<Record<FinanceReferenceKind, NumberingType>> = {
+      PAY: 'PAY',
+      INV: 'INV',
+      EXP: 'EXP',
+    };
+
+    const numberingType = numberingMap[kind];
+
+    if (numberingType) {
+      return this.numberingService.generateNumber(numberingType, tx, date);
+    }
+
+    return this.generateLegacyReferenceNumber(kind, tx, date);
+  }
+
+  private async generateLegacyReferenceNumber(
+    kind: FinanceReferenceKind,
+    tx?: Prisma.TransactionClient,
+    date = new Date(),
+  ): Promise<string> {
     const client = tx ?? this.prisma;
     const prefix = buildFinanceReferencePrefix(kind, date);
-
-    if (kind === 'PAY') {
-      const latest = await client.payment.findFirst({
-        where: { referenceNumber: { startsWith: prefix } },
-        orderBy: { referenceNumber: 'desc' },
-        select: { referenceNumber: true },
-      });
-
-      const sequence = latest?.referenceNumber
-        ? parseFinanceReferenceSequence(latest.referenceNumber, prefix)
-        : null;
-
-      return formatFinanceReferenceNumber(kind, (sequence ?? 0) + 1, date);
-    }
-
-    if (kind === 'INV') {
-      const latest = await client.systemSetting.findFirst({
-        where: {
-          settingKey: { startsWith: INVOICE_SETTING_PREFIX },
-          settingValue: { contains: prefix },
-        },
-        orderBy: { createdAt: 'desc' },
-        select: { settingValue: true },
-      });
-
-      let sequence = 0;
-
-      if (latest?.settingValue) {
-        const record = parseInvoiceRecord(latest.settingValue);
-
-        if (record?.invoiceNumber.startsWith(prefix)) {
-          sequence =
-            parseFinanceReferenceSequence(record.invoiceNumber, prefix) ?? 0;
-        }
-      }
-
-      return formatFinanceReferenceNumber(kind, sequence + 1, date);
-    }
-
-    if (kind === 'EXP') {
-      const latest = await client.expense.findFirst({
-        where: { description: { contains: prefix } },
-        orderBy: { createdAt: 'desc' },
-        select: { description: true },
-      });
-
-      const match = latest?.description?.match(
-        new RegExp(`${prefix.replace(/-/g, '\\-')}(\\d{6})`),
-      );
-      const sequence = match ? Number.parseInt(match[1], 10) : 0;
-
-      return formatFinanceReferenceNumber(kind, sequence + 1, date);
-    }
 
     const latestRefund = await client.cashflow.findFirst({
       where: {

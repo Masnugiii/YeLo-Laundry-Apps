@@ -1679,6 +1679,26 @@ model ReceiptSetting {
 }
 
 // ---------------------------------------------------------------------------
+// NumberingSequence
+// ---------------------------------------------------------------------------
+
+/// Centralized business numbering configuration and counters.
+model NumberingSequence {
+  id             String    @id @default(uuid()) @db.Uuid
+  type           String    @unique @db.VarChar(10)
+  prefix         String    @db.VarChar(20)
+  currentCounter Int       @default(0) @map("current_counter")
+  padding        Int       @default(6)
+  dailyReset     Boolean   @default(true) @map("daily_reset")
+  lastResetDate  DateTime? @map("last_reset_date") @db.Date
+  isActive       Boolean   @default(true) @map("is_active")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("numbering_sequences")
+}
+
+// ---------------------------------------------------------------------------
 // QueueSetting
 // ---------------------------------------------------------------------------
 

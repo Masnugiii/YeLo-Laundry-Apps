@@ -35,6 +35,7 @@ describe('SettingsService', () => {
     expenseCategory: { findMany: jest.fn() },
     notificationTemplate: { findMany: jest.fn() },
     queueSetting: { findFirst: jest.fn() },
+    numberingSequence: { findMany: jest.fn() },
   };
 
   let service: SettingsService;
@@ -66,6 +67,7 @@ describe('SettingsService', () => {
     prisma.expenseCategory.findMany.mockResolvedValue([]);
     prisma.notificationTemplate.findMany.mockResolvedValue([]);
     prisma.queueSetting.findFirst.mockResolvedValue(null);
+    prisma.numberingSequence.findMany.mockResolvedValue([]);
 
     const manifest = await service.getManifest();
 

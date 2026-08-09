@@ -129,6 +129,6 @@ export const SETTINGS_SECTION_META: Record<
   numbering: {
     label: 'Business Numbering',
     writable: false,
-    description: 'ORD/INV/EXP/PAY/CST/EMP numbering (Phase 2)',
+    description: 'ORD/INV/EXP/PAY/CST/EMP numbering configuration',
   },
 };
