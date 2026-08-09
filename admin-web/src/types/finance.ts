@@ -196,6 +196,44 @@ export interface FinanceReportParams {
   dateTo?: string;
 }
 
+export interface RevenueSummary {
+  total: number;
+  paymentCount: number;
+}
+
+export interface ExpenseCategorySummary {
+  categoryCode: string;
+  categoryName: string;
+  amount: number;
+  count: number;
+}
+
+export interface ExpenseSummary {
+  total: number;
+  expenseCount: number;
+  byCategory: ExpenseCategorySummary[];
+}
+
+export interface WalletSummary {
+  topUp: number;
+  walletPayment: number;
+  refund: number;
+  currentBalance: number;
+  activeWallets: number;
+}
+
+export interface FinancialSummary {
+  period: FinancePeriod;
+  dateFrom: string;
+  dateTo: string;
+  revenue: RevenueSummary;
+  expense: ExpenseSummary;
+  payment: PaymentHistorySummary;
+  wallet: WalletSummary;
+  profitLoss: ProfitLossSummary;
+  trend: FinanceTrendPoint[];
+}
+
 export interface Payment {
   id: string;
   referenceNumber: string | null;

@@ -4,6 +4,7 @@ import {
   OrderPaymentStatus,
   PaymentStatus,
   ReferenceType,
+  WalletTransactionType,
 } from '@prisma/client';
 import { PrismaService } from '../database/prisma/prisma.service';
 import { ApiSuccessResponse } from '../common/interfaces/api-response.interface';
@@ -148,6 +149,44 @@ export interface PaymentHistorySummary {
   wallet: number;
   outstanding: number;
   refund: number;
+}
+
+export interface RevenueSummary {
+  total: number;
+  paymentCount: number;
+}
+
+export interface ExpenseCategorySummary {
+  categoryCode: string;
+  categoryName: string;
+  amount: number;
+  count: number;
+}
+
+export interface ExpenseSummary {
+  total: number;
+  expenseCount: number;
+  byCategory: ExpenseCategorySummary[];
+}
+
+export interface WalletSummary {
+  topUp: number;
+  walletPayment: number;
+  refund: number;
+  currentBalance: number;
+  activeWallets: number;
+}
+
+export interface FinancialSummary {
+  period: FinancePeriod;
+  dateFrom: string;
+  dateTo: string;
+  revenue: RevenueSummary;
+  expense: ExpenseSummary;
+  payment: PaymentHistorySummary;
+  wallet: WalletSummary;
+  profitLoss: ProfitLossSummary;
+  trend: FinanceTrendPoint[];
 }
 
 @Injectable()
@@ -652,6 +691,131 @@ export class ReportService {
       success: true,
       message: 'Payment history summary retrieved successfully',
       data: summary,
+    };
+  }
+
+  async getFinancialSummary(
+    query: FinanceReportQueryDto,
+  ): Promise<ApiSuccessResponse<FinancialSummary>> {
+    const period = query.period ?? FinancePeriod.MONTHLY;
+    const { start, end } = this.resolveRange(period, query.dateFrom, query.dateTo);
+
+    const [
+      revenueAgg,
+      paidPaymentCount,
+      expenseAgg,
+      expenseRows,
+      paymentHistory,
+      walletSummary,
+      profitLoss,
+      trendRows,
+    ] = await Promise.all([
+      this.sumIncome(start, end),
+      this.prisma.payment.count({
+        where: {
+          deletedAt: null,
+          paymentStatus: PaymentStatus.PAID,
+          paidAt: { gte: start, lte: end },
+        },
+      }),
+      this.sumExpense(start, end),
+      this.prisma.expense.findMany({
+        where: {
+          deletedAt: null,
+          expenseDate: { gte: start, lte: end },
+        },
+        select: {
+          amount: true,
+          expenseCategory: { select: { code: true, name: true } },
+        },
+      }),
+      this.getPaymentHistory(query),
+      this.buildWalletSummary(start, end),
+      this.getProfitLoss(query),
+      this.prisma.cashflow.findMany({
+        where: { transactionDate: { gte: start, lte: end } },
+        orderBy: { transactionDate: 'asc' },
+        select: {
+          transactionDate: true,
+          type: true,
+          amount: true,
+        },
+      }),
+    ]);
+
+    const categoryMap = new Map<string, ExpenseCategorySummary>();
+    for (const row of expenseRows) {
+      const code = row.expenseCategory.code;
+      const current = categoryMap.get(code) ?? {
+        categoryCode: code,
+        categoryName: row.expenseCategory.name,
+        amount: 0,
+        count: 0,
+      };
+      current.amount += Number(row.amount);
+      current.count += 1;
+      categoryMap.set(code, current);
+    }
+
+    return {
+      success: true,
+      message: 'Financial summary retrieved successfully',
+      data: {
+        period,
+        dateFrom: start.toISOString(),
+        dateTo: end.toISOString(),
+        revenue: {
+          total: Number(revenueAgg._sum.amount ?? 0),
+          paymentCount: paidPaymentCount,
+        },
+        expense: {
+          total: Number(expenseAgg._sum.amount ?? 0),
+          expenseCount: expenseRows.length,
+          byCategory: [...categoryMap.values()]
+            .map((item) => ({
+              ...item,
+              amount: Number(item.amount.toFixed(2)),
+            }))
+            .sort((a, b) => b.amount - a.amount),
+        },
+        payment: paymentHistory.data!,
+        wallet: walletSummary,
+        profitLoss: profitLoss.data!.summary,
+        trend: this.buildDailyTrends(trendRows),
+      },
+    };
+  }
+
+  private async buildWalletSummary(start: Date, end: Date): Promise<WalletSummary> {
+    const txWhere = {
+      deletedAt: null,
+      createdAt: { gte: start, lte: end },
+    };
+
+    const [typeGroups, balance] = await Promise.all([
+      this.prisma.walletTransaction.groupBy({
+        by: ['type'],
+        where: txWhere,
+        _sum: { amount: true },
+      }),
+      this.prisma.customerWallet.aggregate({
+        where: { deletedAt: null, isActive: true },
+        _sum: { currentBalance: true },
+        _count: true,
+      }),
+    ]);
+
+    const byType = (type: WalletTransactionType) => {
+      const row = typeGroups.find((group) => group.type === type);
+      return Number(row?._sum.amount ?? 0);
+    };
+
+    return {
+      topUp: byType(WalletTransactionType.top_up),
+      walletPayment: byType(WalletTransactionType.deduction),
+      refund: byType(WalletTransactionType.refund),
+      currentBalance: Number(balance._sum.currentBalance ?? 0),
+      activeWallets: balance._count,
     };
   }
 

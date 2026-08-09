@@ -19,6 +19,8 @@ class FinanceRepository {
     int page = 1,
     int limit = 20,
     String? search,
+    DateTime? dateFrom,
+    DateTime? dateTo,
   }) async {
     final data = await _apiClient.get<Map<String, dynamic>>(
       '/payments',
@@ -26,6 +28,8 @@ class FinanceRepository {
         'page': page,
         'limit': limit,
         if (search != null && search.isNotEmpty) 'search': search,
+        if (dateFrom != null) 'dateFrom': dateFrom.toIso8601String(),
+        if (dateTo != null) 'dateTo': dateTo.toIso8601String(),
       },
       parser: (json) => json as Map<String, dynamic>,
     );
@@ -62,6 +66,38 @@ class FinanceRepository {
     return PaginatedResponse(
       items: items,
       meta: PaginatedMeta.fromJson(data['meta'] as Map<String, dynamic>? ?? {}),
+    );
+  }
+
+  Future<Map<String, dynamic>> fetchFinancialSummary({
+    String period = 'monthly',
+    String? dateFrom,
+    String? dateTo,
+  }) async {
+    return _apiClient.get<Map<String, dynamic>>(
+      '/finance/summary',
+      queryParameters: {
+        'period': period,
+        if (dateFrom != null) 'dateFrom': dateFrom,
+        if (dateTo != null) 'dateTo': dateTo,
+      },
+      parser: (json) => json as Map<String, dynamic>,
+    );
+  }
+
+  Future<Map<String, dynamic>> fetchPaymentHistory({
+    String period = 'daily',
+    String? dateFrom,
+    String? dateTo,
+  }) async {
+    return _apiClient.get<Map<String, dynamic>>(
+      '/finance/payment-history',
+      queryParameters: {
+        'period': period,
+        if (dateFrom != null) 'dateFrom': dateFrom,
+        if (dateTo != null) 'dateTo': dateTo,
+      },
+      parser: (json) => json as Map<String, dynamic>,
     );
   }
 
@@ -111,13 +147,27 @@ class FinanceRepository {
         DateTime.tryParse(json['createdAt'] as String? ?? '') ??
         DateTime.now();
 
+    final customer = json['customer'];
+    final customerName = customer is Map<String, dynamic>
+        ? customer['fullName'] as String? ?? ''
+        : json['customerName'] as String? ?? '';
+
+    final paymentMethodRaw = json['paymentMethod'];
+    final paymentMethodCode = paymentMethodRaw is Map<String, dynamic>
+        ? paymentMethodRaw['apiCode'] as String? ??
+            paymentMethodRaw['code'] as String?
+        : paymentMethodRaw as String?;
+
     return PaymentTransaction(
-      customerName: json['customerName'] as String? ?? '',
-      queueNumber: json['orderNumber'] as String? ?? json['referenceNumber'] as String? ?? '',
+      customerName: customerName,
+      queueNumber: json['orderNumber'] as String? ??
+          json['queueNumber'] as String? ??
+          json['referenceNumber'] as String? ??
+          '',
       service: LaundryServiceType.regular,
       weightKg: 0,
       totalPayment: 'Rp${_formatAmount(amount)}',
-      paymentMethod: _mapPaymentMethod(json['paymentMethod'] as String?),
+      paymentMethod: _mapPaymentMethod(paymentMethodCode),
       pickupDelivery: PaymentPickupDelivery.datangSendiri,
       laundryStatus: PaymentLaundryStatus.menunggu,
       paymentTime:

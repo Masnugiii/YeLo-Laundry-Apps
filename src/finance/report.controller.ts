@@ -17,6 +17,7 @@ import {
 import {
   CashFlowReport,
   FinanceDashboard,
+  FinancialSummary,
   PaginatedRevenue,
   PaymentHistorySummary,
   ProfitLossReport,
@@ -73,5 +74,18 @@ export class ReportController {
     @Query() query: FinanceReportQueryDto,
   ): Promise<ApiSuccessResponse<PaymentHistorySummary>> {
     return this.reportService.getPaymentHistory(query);
+  }
+
+  @Get('summary')
+  @Roles(...VIEW_ROLES)
+  @ApiOperation({
+    summary:
+      'Get consolidated financial summary (revenue, expense, payment, wallet, P&L)',
+  })
+  @ApiResponse({ status: 200, description: 'Financial summary retrieved' })
+  getFinancialSummary(
+    @Query() query: FinanceReportQueryDto,
+  ): Promise<ApiSuccessResponse<FinancialSummary>> {
+    return this.reportService.getFinancialSummary(query);
   }
 }

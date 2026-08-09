@@ -8,6 +8,7 @@ import type {
   ExpenseCategory,
   ExpenseListParams,
   FinanceDashboard,
+  FinancialSummary,
   FinanceReportParams,
   Payment,
   PaymentHistorySummary,
@@ -112,6 +113,17 @@ export function usePaymentHistory(params: FinanceReportParams) {
     queryFn: () =>
       apiGet<PaymentHistorySummary>(
         "/finance/payment-history",
+        params as Record<string, unknown>,
+      ),
+  });
+}
+
+export function useFinancialSummary(params: FinanceReportParams) {
+  return useQuery({
+    queryKey: [FINANCE_QUERY_KEY, "summary", params],
+    queryFn: () =>
+      apiGet<FinancialSummary>(
+        "/finance/summary",
         params as Record<string, unknown>,
       ),
   });

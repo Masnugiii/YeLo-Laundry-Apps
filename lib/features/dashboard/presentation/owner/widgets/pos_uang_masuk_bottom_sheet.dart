@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
-import 'package:yelo_laundry_erp/features/payments/data/dummy_payment_transactions.dart';
 import 'package:yelo_laundry_erp/features/payments/presentation/widgets/payment_transaction_card.dart';
 import 'package:yelo_laundry_erp/features/payments/theme/payment_colors.dart';
+import 'package:yelo_laundry_erp/features/reports/providers/reports_provider.dart';
+import 'package:yelo_laundry_erp/shared/widgets/api_state_widgets.dart';
 
 void showUangMasukBottomSheet(BuildContext context) {
   showModalBottomSheet<void>(
@@ -17,12 +21,29 @@ void showUangMasukBottomSheet(BuildContext context) {
   );
 }
 
-class _UangMasukBottomSheet extends StatelessWidget {
+class _UangMasukBottomSheet extends ConsumerWidget {
   const _UangMasukBottomSheet();
 
+  String _formatCurrency(num value) {
+    return NumberFormat.currency(
+      locale: 'id_ID',
+      symbol: 'Rp',
+      decimalDigits: 0,
+    ).format(value);
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final paymentsAsync = ref.watch(todayPaymentsProvider);
+    final historyAsync = ref.watch(todayPaymentHistoryProvider);
     final maxHeight = MediaQuery.sizeOf(context).height * 0.9;
+
+    final history =
+        historyAsync.hasValue ? historyAsync.requireValue : const <String, dynamic>{};
+    final totalToday = ((history['cash'] as num?) ?? 0) +
+        ((history['qris'] as num?) ?? 0) +
+        ((history['transfer'] as num?) ?? 0) +
+        ((history['wallet'] as num?) ?? 0);
 
     return SizedBox(
       height: maxHeight,
@@ -65,17 +86,44 @@ class _UangMasukBottomSheet extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: AppSpacing.s8),
-                Text(
-                  totalUangMasukHariIni,
-                  style: GoogleFonts.poppins(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w700,
-                    color: PaymentColors.onPrimary,
-                    height: 1.1,
+                historyAsync.when(
+                  loading: () => const SizedBox(
+                    height: 36,
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        color: PaymentColors.onPrimary,
+                        strokeWidth: 2,
+                      ),
+                    ),
+                  ),
+                  error: (_, __) => Text(
+                    'Rp0',
+                    style: GoogleFonts.poppins(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w700,
+                      color: PaymentColors.onPrimary,
+                    ),
+                  ),
+                  data: (_) => Text(
+                    _formatCurrency(totalToday),
+                    style: GoogleFonts.poppins(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w700,
+                      color: PaymentColors.onPrimary,
+                      height: 1.1,
+                    ),
                   ),
                 ),
                 const SizedBox(height: AppSpacing.s20),
-                const _PaymentSummarySection(),
+                historyAsync.when(
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, __) => const SizedBox.shrink(),
+                  data: (data) => _PaymentSummarySection(
+                    cash: _formatCurrency((data['cash'] as num?) ?? 0),
+                    qris: _formatCurrency((data['qris'] as num?) ?? 0),
+                    transfer: _formatCurrency((data['transfer'] as num?) ?? 0),
+                  ),
+                ),
               ],
             ),
           ),
@@ -96,12 +144,34 @@ class _UangMasukBottomSheet extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s20),
-              itemCount: dummyPaymentTransactions.length,
-              itemBuilder: (context, index) {
-                return PaymentTransactionCard(
-                  transaction: dummyPaymentTransactions[index],
+            child: paymentsAsync.when(
+              loading: () => const ApiLoadingView(),
+              error: (error, _) => ApiErrorView(
+                message: messageFromError(error),
+                onRetry: () => ref.invalidate(todayPaymentsProvider),
+              ),
+              data: (transactions) {
+                if (transactions.isEmpty) {
+                  return Center(
+                    child: Text(
+                      'Belum ada pembayaran hari ini.',
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  );
+                }
+
+                return ListView.builder(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: AppSpacing.s20),
+                  itemCount: transactions.length,
+                  itemBuilder: (context, index) {
+                    return PaymentTransactionCard(
+                      transaction: transactions[index],
+                    );
+                  },
                 );
               },
             ),
@@ -117,15 +187,18 @@ class _UangMasukBottomSheet extends StatelessWidget {
               width: double.infinity,
               height: 52,
               child: FilledButton(
-              onPressed: () {},
-              child: Text(
-                'Lihat Laporan',
-                style: GoogleFonts.poppins(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  context.push('/reports');
+                },
+                child: Text(
+                  'Lihat Laporan',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
-            ),
             ),
           ),
         ],
@@ -135,7 +208,15 @@ class _UangMasukBottomSheet extends StatelessWidget {
 }
 
 class _PaymentSummarySection extends StatelessWidget {
-  const _PaymentSummarySection();
+  const _PaymentSummarySection({
+    required this.cash,
+    required this.qris,
+    required this.transfer,
+  });
+
+  final String cash;
+  final String qris;
+  final String transfer;
 
   static const _dividerColor = Color(0x40FFFFFF);
 
@@ -143,18 +224,18 @@ class _PaymentSummarySection extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: const [
-        Divider(height: 1, thickness: 1, color: _dividerColor),
-        SizedBox(height: AppSpacing.s12),
-        _PaymentMethodRow(label: 'Cash', amount: paymentSummaryCash),
-        SizedBox(height: AppSpacing.s12),
-        Divider(height: 1, thickness: 1, color: _dividerColor),
-        SizedBox(height: AppSpacing.s12),
-        _PaymentMethodRow(label: 'QRIS', amount: paymentSummaryQris),
-        SizedBox(height: AppSpacing.s12),
-        Divider(height: 1, thickness: 1, color: _dividerColor),
-        SizedBox(height: AppSpacing.s12),
-        _PaymentMethodRow(label: 'Transfer', amount: paymentSummaryTransfer),
+      children: [
+        const Divider(height: 1, thickness: 1, color: _dividerColor),
+        const SizedBox(height: AppSpacing.s12),
+        _PaymentMethodRow(label: 'Cash', amount: cash),
+        const SizedBox(height: AppSpacing.s12),
+        const Divider(height: 1, thickness: 1, color: _dividerColor),
+        const SizedBox(height: AppSpacing.s12),
+        _PaymentMethodRow(label: 'QRIS', amount: qris),
+        const SizedBox(height: AppSpacing.s12),
+        const Divider(height: 1, thickness: 1, color: _dividerColor),
+        const SizedBox(height: AppSpacing.s12),
+        _PaymentMethodRow(label: 'Transfer', amount: transfer),
       ],
     );
   }

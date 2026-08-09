@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
@@ -17,15 +18,17 @@ import 'package:yelo_laundry_erp/features/reports/presentation/widgets/report_pe
 import 'package:yelo_laundry_erp/features/reports/presentation/widgets/revenue_trend_chart.dart';
 import 'package:yelo_laundry_erp/features/reports/presentation/widgets/top_customers_card.dart';
 import 'package:yelo_laundry_erp/features/reports/presentation/widgets/top_services_chart.dart';
+import 'package:yelo_laundry_erp/features/reports/providers/reports_provider.dart';
+import 'package:yelo_laundry_erp/shared/widgets/api_state_widgets.dart';
 
-class ReportsScreen extends StatefulWidget {
+class ReportsScreen extends ConsumerStatefulWidget {
   const ReportsScreen({super.key});
 
   @override
-  State<ReportsScreen> createState() => _ReportsScreenState();
+  ConsumerState<ReportsScreen> createState() => _ReportsScreenState();
 }
 
-class _ReportsScreenState extends State<ReportsScreen> {
+class _ReportsScreenState extends ConsumerState<ReportsScreen> {
   ReportPeriodFilter _selectedFilter = ReportPeriodFilter.thisMonth;
 
   void _onFilterSelected(ReportPeriodFilter filter) {
@@ -39,12 +42,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
           behavior: SnackBarBehavior.floating,
         ),
       );
+      return;
     }
     setState(() => _selectedFilter = filter);
   }
 
   @override
   Widget build(BuildContext context) {
+    final reportAsync = ref.watch(financialReportProvider(_selectedFilter));
+
     return Scaffold(
       backgroundColor: AppColors.dashboardBackground,
       appBar: AppBar(
@@ -68,77 +74,131 @@ class _ReportsScreenState extends State<ReportsScreen> {
             onFilterSelected: _onFilterSelected,
           ),
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.s20,
-                AppSpacing.s8,
-                AppSpacing.s20,
-                AppSpacing.s32,
+            child: reportAsync.when(
+              loading: () => const ApiLoadingView(),
+              error: (error, _) => ApiErrorView(
+                message: messageFromError(error),
+                onRetry: () =>
+                    ref.invalidate(financialReportProvider(_selectedFilter)),
               ),
-              children: [
-                ReportTheme.sectionCard(
-                  title: 'Financial Overview',
-                  child: const FinancialKpiGrid(overview: dummyFinancialOverview),
-                ),
-                const SizedBox(height: AppSpacing.s16),
-                ReportTheme.sectionCard(
-                  title: 'Revenue Trend',
-                  subtitle: 'Perkembangan omzet bulanan (dalam jutaan Rp)',
-                  child: const RevenueTrendChart(data: dummyRevenueTrend),
-                ),
-                const SizedBox(height: AppSpacing.s16),
-                ReportTheme.sectionCard(
-                  title: 'Binatu Performance',
-                  child: const BinatuPerformanceCard(
-                    performance: dummyBinatuPerformance,
+              data: (report) => RefreshIndicator(
+                onRefresh: () async {
+                  ref.invalidate(financialReportProvider(_selectedFilter));
+                  await ref.read(financialReportProvider(_selectedFilter).future);
+                },
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.s20,
+                    AppSpacing.s8,
+                    AppSpacing.s20,
+                    AppSpacing.s32,
                   ),
+                  children: [
+                    ReportTheme.sectionCard(
+                      title: 'Financial Overview',
+                      child: FinancialKpiGrid(overview: report.overview),
+                    ),
+                    const SizedBox(height: AppSpacing.s16),
+                    ReportTheme.sectionCard(
+                      title: 'Revenue Trend',
+                      subtitle: 'Perkembangan omzet dalam periode terpilih',
+                      child: report.revenueTrend.isEmpty
+                          ? const _EmptyReportHint(
+                              message: 'Belum ada data tren untuk periode ini.',
+                            )
+                          : RevenueTrendChart(data: report.revenueTrend),
+                    ),
+                    const SizedBox(height: AppSpacing.s16),
+                    ReportTheme.sectionCard(
+                      title: 'Binatu Performance',
+                      child: const BinatuPerformanceCard(
+                        performance: dummyBinatuPerformance,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.s16),
+                    ReportTheme.sectionCard(
+                      title: 'Employee Performance',
+                      subtitle: 'Performa tim binatu bulan ini',
+                      child: const EmployeePerformanceCard(
+                        employees: dummyEmployeePerformance,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.s16),
+                    ReportTheme.sectionCard(
+                      title: 'Customer Review',
+                      subtitle: 'Ulasan pelanggan terbaru',
+                      child: const CustomerReviewCard(
+                        reviews: dummyCustomerReviews,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.s16),
+                    ReportTheme.sectionCard(
+                      title: 'Busy Day Calendar',
+                      subtitle: 'Identifikasi hari ramai dan sepi',
+                      child: BusyDayCalendar(entries: dummyBusyDaysAugust2026),
+                    ),
+                    const SizedBox(height: AppSpacing.s16),
+                    const AiPlannerCard(recommendations: dummyAiRecommendations),
+                    const SizedBox(height: AppSpacing.s16),
+                    ReportTheme.sectionCard(
+                      title: 'Top Services',
+                      subtitle: 'Layanan paling banyak dipesan',
+                      child: report.topServices.isEmpty
+                          ? const _EmptyReportHint(
+                              message: 'Belum ada data layanan untuk periode ini.',
+                            )
+                          : TopServicesChart(services: report.topServices),
+                    ),
+                    const SizedBox(height: AppSpacing.s16),
+                    ReportTheme.sectionCard(
+                      title: 'Top Customers',
+                      subtitle: 'Pelanggan dengan kontribusi tertinggi',
+                      child: report.topCustomers.isEmpty
+                          ? const _EmptyReportHint(
+                              message:
+                                  'Belum ada data pelanggan untuk periode ini.',
+                            )
+                          : TopCustomersCard(customers: report.topCustomers),
+                    ),
+                    const SizedBox(height: AppSpacing.s16),
+                    ReportTheme.sectionCard(
+                      title: 'Payment Analytics',
+                      subtitle: 'Distribusi metode pembayaran',
+                      child: report.paymentAnalytics.isEmpty
+                          ? const _EmptyReportHint(
+                              message:
+                                  'Belum ada pembayaran untuk periode ini.',
+                            )
+                          : PaymentAnalyticsChart(
+                              analytics: report.paymentAnalytics,
+                            ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: AppSpacing.s16),
-                ReportTheme.sectionCard(
-                  title: 'Employee Performance',
-                  subtitle: 'Performa tim binatu bulan ini',
-                  child: const EmployeePerformanceCard(
-                    employees: dummyEmployeePerformance,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.s16),
-                ReportTheme.sectionCard(
-                  title: 'Customer Review',
-                  subtitle: 'Ulasan pelanggan terbaru',
-                  child: const CustomerReviewCard(reviews: dummyCustomerReviews),
-                ),
-                const SizedBox(height: AppSpacing.s16),
-                ReportTheme.sectionCard(
-                  title: 'Busy Day Calendar',
-                  subtitle: 'Identifikasi hari ramai dan sepi',
-                  child: BusyDayCalendar(entries: dummyBusyDaysAugust2026),
-                ),
-                const SizedBox(height: AppSpacing.s16),
-                const AiPlannerCard(recommendations: dummyAiRecommendations),
-                const SizedBox(height: AppSpacing.s16),
-                ReportTheme.sectionCard(
-                  title: 'Top Services',
-                  subtitle: 'Layanan paling banyak dipesan',
-                  child: const TopServicesChart(services: dummyTopServices),
-                ),
-                const SizedBox(height: AppSpacing.s16),
-                ReportTheme.sectionCard(
-                  title: 'Top Customers',
-                  subtitle: 'Pelanggan dengan kontribusi tertinggi',
-                  child: const TopCustomersCard(customers: dummyTopCustomers),
-                ),
-                const SizedBox(height: AppSpacing.s16),
-                ReportTheme.sectionCard(
-                  title: 'Payment Analytics',
-                  subtitle: 'Distribusi metode pembayaran',
-                  child: const PaymentAnalyticsChart(
-                    analytics: dummyPaymentAnalytics,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _EmptyReportHint extends StatelessWidget {
+  const _EmptyReportHint({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.s16),
+      child: Text(
+        message,
+        style: GoogleFonts.poppins(
+          fontSize: 14,
+          color: AppColors.textSecondary,
+        ),
       ),
     );
   }
