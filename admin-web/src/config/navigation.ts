@@ -35,6 +35,7 @@ export const adminNav: NavItem[] = [
       { title: "Laundry Production", href: "/operations/production", icon: Shirt },
       { title: "Pickup & Delivery", href: "/operations/pickup-delivery", icon: Truck },
       { title: "Attendance", href: "/operations/attendance", icon: Clock },
+      { title: "Customer Service", href: "/operations/customer-service", icon: Bell },
     ],
   },
   {

@@ -22,7 +22,7 @@ class EmployeeAttendanceCard extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: AttendanceTheme.cardDecoration.borderRadius,
+        borderRadius: AttendanceTheme.cardRadius,
         child: Container(
       width: double.infinity,
       padding: const EdgeInsets.all(AppSpacing.s20),

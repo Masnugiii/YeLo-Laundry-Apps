@@ -28,6 +28,7 @@ import { HealthModule } from './modules/health/health.module';
 import { SettingsModule } from './settings/settings.module';
 import { MasterDataModule } from './master-data/master-data.module';
 import { NumberingModule } from './numbering/numbering.module';
+import { CustomerServiceModule } from './customer-service/customer-service.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { NumberingModule } from './numbering/numbering.module';
     SettingsModule,
     MasterDataModule,
     NumberingModule,
+    CustomerServiceModule,
   ],
   providers: [
     {

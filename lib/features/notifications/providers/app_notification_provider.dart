@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:yelo_laundry_erp/features/notifications/data/dummy_cashier_notifications.dart';
 import 'package:yelo_laundry_erp/features/notifications/models/cashier_transaction_notification.dart';
 import 'package:yelo_laundry_erp/features/notifications/models/laundry_job_accepted_notification.dart';
 import 'package:yelo_laundry_erp/features/notifications/models/operator_assistance_notification.dart';
@@ -35,10 +34,10 @@ class AppNotificationState {
 class AppNotificationNotifier extends Notifier<AppNotificationState> {
   @override
   AppNotificationState build() {
-    return AppNotificationState(
-      transactionNotifications: dummyCashierTransactionNotifications(),
-      laundryJobNotifications: const [],
-      operatorAssistanceNotifications: const [],
+    return const AppNotificationState(
+      transactionNotifications: [],
+      laundryJobNotifications: [],
+      operatorAssistanceNotifications: [],
     );
   }
 

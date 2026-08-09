@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:yelo_laundry_erp/core/providers/core_providers.dart';
 import 'package:yelo_laundry_erp/features/dashboard/data/dummy_dashboard_menu_badges.dart';
 
 class ManagerDashboardBadgeState {
@@ -32,11 +33,25 @@ class ManagerDashboardBadgeState {
 class ManagerDashboardBadgeNotifier extends Notifier<ManagerDashboardBadgeState> {
   @override
   ManagerDashboardBadgeState build() {
+    Future.microtask(_loadApiCounts);
     return ManagerDashboardBadgeState(
       pickupDeliveryUnreadCount: dummyManagerPickupDeliveryUnreadCount(),
-      notificationCenterUnreadCount: dummyManagerNotificationCenterUnreadCount(),
-      customerServiceUnreadCount: dummyManagerCustomerServiceUnreadCount(),
+      notificationCenterUnreadCount: 0,
+      customerServiceUnreadCount: 0,
     );
+  }
+
+  Future<void> _loadApiCounts() async {
+    try {
+      final notificationCount =
+          await ref.read(notificationRepositoryProvider).fetchUnreadCount();
+      final csSummary =
+          await ref.read(customerServiceRepositoryProvider).fetchSummary();
+      state = state.copyWith(
+        notificationCenterUnreadCount: notificationCount,
+        customerServiceUnreadCount: csSummary.unreadMessages,
+      );
+    } catch (_) {}
   }
 
   void markPickupDeliveryRead() {
