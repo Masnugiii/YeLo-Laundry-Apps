@@ -11,8 +11,16 @@ import { PayrollService } from '../payroll/payroll.service';
 import { UpdatePayrollSettingsDto } from '../payroll/payroll.dto';
 import { PayrollSettings } from '../payroll/payroll.types';
 import { PrismaService } from '../database/prisma/prisma.service';
+import { AttendanceConfigService } from './config/attendance-config.service';
+import { BackupSettingsService } from './config/backup-settings.service';
+import { DocumentRulesService } from './config/document-rules.service';
+import { NotificationConfigService } from './config/notification-config.service';
 import { ConfigAuditService } from './audit/config-audit.service';
+import { UpdateAttendanceSettingsDto } from './dto/update-attendance-settings.dto';
+import { UpdateBackupSettingsDto } from './dto/update-backup-settings.dto';
 import { UpdateCompanySettingsDto } from './dto/update-company-settings.dto';
+import { UpdateDocumentRulesDto } from './dto/update-document-rules.dto';
+import { UpdateNotificationSettingsDto } from './dto/update-notification-settings.dto';
 import {
   isSettingsSection,
   isWritableSettingsSection,
@@ -32,6 +40,10 @@ export class SettingsService {
     private readonly payrollService: PayrollService,
     private readonly loyaltySettingsService: LoyaltySettingsService,
     private readonly configAuditService: ConfigAuditService,
+    private readonly attendanceConfigService: AttendanceConfigService,
+    private readonly documentRulesService: DocumentRulesService,
+    private readonly backupSettingsService: BackupSettingsService,
+    private readonly notificationConfigService: NotificationConfigService,
   ) {}
 
   async getManifest(): Promise<SettingsManifestResponse> {
@@ -75,13 +87,25 @@ export class SettingsService {
 
     switch (section) {
       case 'company':
-        after = await this.updateCompanySection(body, employeeId);
+        after = await this.updateCompanySection(body);
         break;
       case 'payroll':
         after = await this.updatePayrollSection(body, employeeId);
         break;
       case 'loyalty':
         after = await this.updateLoyaltySection(body, employeeId);
+        break;
+      case 'attendance':
+        after = await this.updateAttendanceSection(body);
+        break;
+      case 'documents':
+        after = await this.updateDocumentsSection(body);
+        break;
+      case 'notifications':
+        after = await this.updateNotificationsSection(body);
+        break;
+      case 'backup':
+        after = await this.updateBackupSection(body);
         break;
       default:
         throw new BadRequestException(
@@ -134,10 +158,11 @@ export class SettingsService {
       case 'delivery':
         return {
           status: 'not_configured',
-          message: 'Delivery configuration will be available in a future release',
+          message:
+            'No delivery configuration model exists in the current schema',
         };
       case 'attendance':
-        return this.readAttendanceSettings();
+        return this.attendanceConfigService.getConfig();
       case 'payment_methods':
         return this.prisma.paymentMethod.findMany({
           where: { deletedAt: null },
@@ -149,20 +174,11 @@ export class SettingsService {
           orderBy: { name: 'asc' },
         });
       case 'notifications':
-        return this.prisma.notificationTemplate.findMany({
-          where: { deletedAt: null },
-          orderBy: { code: 'asc' },
-        });
+        return this.notificationConfigService.getConfig();
       case 'backup':
-        return {
-          status: 'not_configured',
-          message: 'Backup configuration will be available in a future release',
-        };
+        return this.backupSettingsService.getSettings();
       case 'documents':
-        return {
-          status: 'not_configured',
-          message: 'Document rules will be available in a future release',
-        };
+        return this.documentRulesService.getRules();
       case 'numbering': {
         const sequences = await this.prisma.numberingSequence.findMany({
           orderBy: { type: 'asc' },
@@ -180,28 +196,7 @@ export class SettingsService {
     }
   }
 
-  private async readAttendanceSettings() {
-    const [attendanceSetting, shifts] = await Promise.all([
-      this.prisma.attendanceSetting.findFirst({
-        where: { isActive: true },
-        orderBy: { createdAt: 'desc' },
-      }),
-      this.prisma.systemSetting.findMany({
-        where: { settingKey: { startsWith: 'attendance.shift.' } },
-        select: { settingKey: true, settingValue: true },
-      }),
-    ]);
-
-    return {
-      attendanceSetting,
-      shiftCount: shifts.length,
-    };
-  }
-
-  private async updateCompanySection(
-    body: unknown,
-    _employeeId: string,
-  ): Promise<unknown> {
+  private async updateCompanySection(body: unknown): Promise<unknown> {
     const dto = await validateSettingsDto(UpdateCompanySettingsDto, body);
     return this.adminSettingsService.updateCompanySettings(dto);
   }
@@ -232,5 +227,25 @@ export class SettingsService {
         skipAudit: true,
       },
     );
+  }
+
+  private async updateAttendanceSection(body: unknown): Promise<unknown> {
+    const dto = await validateSettingsDto(UpdateAttendanceSettingsDto, body);
+    return this.attendanceConfigService.updateConfig(dto);
+  }
+
+  private async updateDocumentsSection(body: unknown): Promise<unknown> {
+    const dto = await validateSettingsDto(UpdateDocumentRulesDto, body);
+    return this.documentRulesService.updateRules(dto);
+  }
+
+  private async updateNotificationsSection(body: unknown): Promise<unknown> {
+    const dto = await validateSettingsDto(UpdateNotificationSettingsDto, body);
+    return this.notificationConfigService.updateConfig(dto);
+  }
+
+  private async updateBackupSection(body: unknown): Promise<unknown> {
+    const dto = await validateSettingsDto(UpdateBackupSettingsDto, body);
+    return this.backupSettingsService.updateSettings(dto);
   }
 }

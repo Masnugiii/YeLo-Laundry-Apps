@@ -70,6 +70,38 @@ export class AttendanceSettingsRepository {
     };
   }
 
+  async saveGpsConfig(config: GpsConfig): Promise<GpsConfig> {
+    await Promise.all([
+      this.upsertSetting(
+        GPS_LATITUDE_KEY,
+        String(config.officeLatitude),
+        'Office GPS latitude',
+      ),
+      this.upsertSetting(
+        GPS_LONGITUDE_KEY,
+        String(config.officeLongitude),
+        'Office GPS longitude',
+      ),
+      this.upsertSetting(
+        GPS_RADIUS_KEY,
+        String(config.officeRadiusMeters),
+        'Office GPS radius in meters',
+      ),
+    ]);
+
+    return config;
+  }
+
+  async clearGpsConfig(): Promise<void> {
+    await this.prisma.systemSetting.deleteMany({
+      where: {
+        settingKey: {
+          in: [GPS_LATITUDE_KEY, GPS_LONGITUDE_KEY, GPS_RADIUS_KEY],
+        },
+      },
+    });
+  }
+
   async saveShift(record: ShiftRecord) {
     await this.upsertSetting(
       buildShiftSettingKey(record.id),

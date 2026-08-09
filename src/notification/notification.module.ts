@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { SettingsModule } from '../settings/settings.module';
 import {
   LogEmailNotificationProvider,
   LogPushNotificationProvider,
@@ -13,6 +14,7 @@ import { NotificationService } from './notification.service';
 import { NotificationTemplateService } from './notification-template.service';
 
 @Module({
+  imports: [SettingsModule],
   controllers: [NotificationController],
   providers: [
     NotificationService,

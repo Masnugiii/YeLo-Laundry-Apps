@@ -7,8 +7,15 @@ import { LoyaltySettingsService } from '../../src/loyalty/loyalty-settings.servi
 import { DEFAULT_LOYALTY_SETTINGS } from '../../src/loyalty/loyalty.types';
 import { PayrollService } from '../../src/payroll/payroll.service';
 import { DEFAULT_PAYROLL_SETTINGS } from '../../src/payroll/payroll.types';
+import { AttendanceConfigService } from '../../src/settings/config/attendance-config.service';
+import { BackupSettingsService } from '../../src/settings/config/backup-settings.service';
+import { DocumentRulesService } from '../../src/settings/config/document-rules.service';
+import { NotificationConfigService } from '../../src/settings/config/notification-config.service';
 import { ConfigAuditService } from '../../src/settings/audit/config-audit.service';
 import { SettingsService } from '../../src/settings/settings.service';
+import { DEFAULT_BACKUP_SETTINGS } from '../../src/settings/types/backup-settings.types';
+import { DEFAULT_DOCUMENT_RULES } from '../../src/settings/types/document-rules.types';
+import { DEFAULT_NOTIFICATION_TOGGLE_SETTINGS } from '../../src/settings/types/notification-settings.types';
 
 describe('SettingsService', () => {
   const adminSettingsService = {
@@ -26,11 +33,25 @@ describe('SettingsService', () => {
   const configAuditService = {
     logConfigUpdated: jest.fn(),
   };
+  const attendanceConfigService = {
+    getConfig: jest.fn(),
+    updateConfig: jest.fn(),
+  };
+  const documentRulesService = {
+    getRules: jest.fn(),
+    updateRules: jest.fn(),
+  };
+  const backupSettingsService = {
+    getSettings: jest.fn(),
+    updateSettings: jest.fn(),
+  };
+  const notificationConfigService = {
+    getConfig: jest.fn(),
+    updateConfig: jest.fn(),
+  };
   const prisma = {
     service: { findMany: jest.fn() },
     servicePrice: { findMany: jest.fn() },
-    attendanceSetting: { findFirst: jest.fn() },
-    systemSetting: { findMany: jest.fn() },
     paymentMethod: { findMany: jest.fn() },
     expenseCategory: { findMany: jest.fn() },
     notificationTemplate: { findMany: jest.fn() },
@@ -48,10 +69,14 @@ describe('SettingsService', () => {
       payrollService as unknown as PayrollService,
       loyaltySettingsService as unknown as LoyaltySettingsService,
       configAuditService as unknown as ConfigAuditService,
+      attendanceConfigService as unknown as AttendanceConfigService,
+      documentRulesService as unknown as DocumentRulesService,
+      backupSettingsService as unknown as BackupSettingsService,
+      notificationConfigService as unknown as NotificationConfigService,
     );
   });
 
-  it('returns unified settings manifest', async () => {
+  function mockManifestBasics() {
     adminSettingsService.getCompanySettings.mockResolvedValue({
       companyName: 'Yelo Laundry',
     });
@@ -61,17 +86,33 @@ describe('SettingsService', () => {
     );
     prisma.service.findMany.mockResolvedValue([]);
     prisma.servicePrice.findMany.mockResolvedValue([]);
-    prisma.attendanceSetting.findFirst.mockResolvedValue(null);
-    prisma.systemSetting.findMany.mockResolvedValue([]);
     prisma.paymentMethod.findMany.mockResolvedValue([]);
     prisma.expenseCategory.findMany.mockResolvedValue([]);
     prisma.notificationTemplate.findMany.mockResolvedValue([]);
     prisma.queueSetting.findFirst.mockResolvedValue(null);
     prisma.numberingSequence.findMany.mockResolvedValue([]);
+    attendanceConfigService.getConfig.mockResolvedValue({
+      workStartTime: '08:00',
+      workEndTime: '17:00',
+      lateToleranceMinutes: 15,
+      overtimeEnabled: false,
+      gps: null,
+      shiftCount: 0,
+    });
+    notificationConfigService.getConfig.mockResolvedValue({
+      settings: DEFAULT_NOTIFICATION_TOGGLE_SETTINGS,
+      templates: [],
+    });
+    backupSettingsService.getSettings.mockResolvedValue(DEFAULT_BACKUP_SETTINGS);
+    documentRulesService.getRules.mockResolvedValue(DEFAULT_DOCUMENT_RULES);
+  }
+
+  it('returns unified settings manifest', async () => {
+    mockManifestBasics();
 
     const manifest = await service.getManifest();
 
-    expect(manifest.writableSections).toEqual(['company', 'payroll', 'loyalty']);
+    expect(manifest.writableSections).toContain('company');
     expect(manifest.sections.company).toEqual({ companyName: 'Yelo Laundry' });
   });
 

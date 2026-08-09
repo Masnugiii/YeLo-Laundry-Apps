@@ -4,13 +4,71 @@ import Link from "next/link";
 import { Card, CardTitle } from "@/components/ui/card";
 
 const sections = [
-  { href: "/settings/services", title: "Services", description: "Laundry service catalog" },
-  { href: "/settings/pricing", title: "Pricing", description: "Active service prices" },
-  { href: "/settings/numbering", title: "Business Numbering", description: "ORD, INV, EXP, PAY, CST, EMP" },
-  { href: "/settings/payment-methods", title: "Payment Methods", description: "Cash, QRIS, transfer, wallet" },
-  { href: "/settings/expense-categories", title: "Expense Categories", description: "Expense classification master data" },
-  { href: "/settings/loyalty", title: "Loyalty", description: "Points, membership, vouchers" },
-  { href: "/finance/payroll/settings", title: "Payroll Rules", description: "Salary calculation settings" },
+  {
+    href: "/settings/company",
+    title: "Company Profile",
+    description: "Outlet profile, timezone, currency, tax",
+  },
+  {
+    href: "/settings/attendance",
+    title: "Attendance",
+    description: "Work hours, late tolerance, GPS defaults",
+  },
+  {
+    href: "/settings/documents",
+    title: "Document Rules",
+    description: "Upload limits and allowed file types",
+  },
+  {
+    href: "/settings/notifications",
+    title: "Notifications",
+    description: "Outlet toggles and message templates",
+  },
+  {
+    href: "/settings/backup",
+    title: "Backup",
+    description: "Schedule and retention configuration",
+  },
+  {
+    href: "/settings/delivery",
+    title: "Delivery",
+    description: "Pickup and delivery configuration status",
+  },
+  {
+    href: "/settings/services",
+    title: "Services",
+    description: "Laundry service catalog",
+  },
+  {
+    href: "/settings/pricing",
+    title: "Pricing",
+    description: "Active service prices",
+  },
+  {
+    href: "/settings/numbering",
+    title: "Business Numbering",
+    description: "ORD, INV, EXP, PAY, CST, EMP",
+  },
+  {
+    href: "/settings/payment-methods",
+    title: "Payment Methods",
+    description: "Cash, QRIS, transfer, wallet",
+  },
+  {
+    href: "/settings/expense-categories",
+    title: "Expense Categories",
+    description: "Expense classification master data",
+  },
+  {
+    href: "/settings/loyalty",
+    title: "Loyalty",
+    description: "Points, membership, vouchers",
+  },
+  {
+    href: "/finance/payroll/settings",
+    title: "Payroll Rules",
+    description: "Salary calculation settings",
+  },
 ];
 
 export default function SettingsPage() {

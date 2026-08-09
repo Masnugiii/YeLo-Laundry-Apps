@@ -18,11 +18,15 @@ export const SETTINGS_SECTIONS = [
 
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 
-/** Sections writable via PATCH /settings/:section in Phase 1. */
+/** Sections writable via PATCH /settings/:section. */
 export const WRITABLE_SETTINGS_SECTIONS: readonly SettingsSection[] = [
   'company',
   'payroll',
   'loyalty',
+  'attendance',
+  'notifications',
+  'documents',
+  'backup',
 ] as const;
 
 export interface SettingsSectionMeta {
@@ -94,12 +98,12 @@ export const SETTINGS_SECTION_META: Record<
   delivery: {
     label: 'Delivery',
     writable: false,
-    description: 'Pickup and delivery configuration (Phase 2)',
+    description: 'Pickup and delivery configuration (not configured)',
   },
   attendance: {
     label: 'Attendance',
-    writable: false,
-    description: 'Work hours and attendance defaults (read-only in Phase 1)',
+    writable: true,
+    description: 'Work hours, late tolerance, overtime, and GPS defaults',
   },
   payment_methods: {
     label: 'Payment Methods',
@@ -113,18 +117,18 @@ export const SETTINGS_SECTION_META: Record<
   },
   notifications: {
     label: 'Notifications',
-    writable: false,
-    description: 'Notification templates and toggles (Phase 2)',
+    writable: true,
+    description: 'Notification toggles and message templates',
   },
   backup: {
     label: 'Backup',
-    writable: false,
-    description: 'Backup schedule and retention (Phase 2)',
+    writable: true,
+    description: 'Backup schedule and retention configuration',
   },
   documents: {
     label: 'Document Rules',
-    writable: false,
-    description: 'Upload limits and file type rules (Phase 2)',
+    writable: true,
+    description: 'Upload limits and file type rules',
   },
   numbering: {
     label: 'Business Numbering',

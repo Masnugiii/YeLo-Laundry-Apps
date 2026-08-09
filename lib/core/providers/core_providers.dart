@@ -14,6 +14,7 @@ import 'package:yelo_laundry_erp/features/laundry/data/laundry_repository.dart';
 import 'package:yelo_laundry_erp/features/notifications/data/notification_repository.dart';
 import 'package:yelo_laundry_erp/features/orders/data/order_repository.dart';
 import 'package:yelo_laundry_erp/features/pickup_delivery/data/pickup_delivery_repository.dart';
+import 'package:yelo_laundry_erp/features/settings/data/settings_repository.dart';
 
 final secureStorageProvider = Provider<SecureStorageService>(
   (ref) => SecureStorageService(),
@@ -84,4 +85,8 @@ final notificationRepositoryProvider = Provider<NotificationRepository>((ref) {
 
 final dashboardRepositoryProvider = Provider<DashboardRepository>((ref) {
   return DashboardRepository(ref.watch(apiClientProvider));
+});
+
+final settingsRepositoryProvider = Provider<SettingsRepository>((ref) {
+  return SettingsRepository(ref.watch(apiClientProvider));
 });

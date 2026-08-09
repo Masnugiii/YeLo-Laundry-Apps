@@ -5,6 +5,7 @@ import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
 import 'package:yelo_laundry_erp/features/settings/models/settings_models.dart';
 import 'package:yelo_laundry_erp/features/settings/presentation/widgets/ironing_queue_priority_settings_section.dart';
+import 'package:yelo_laundry_erp/features/settings/presentation/widgets/system_config_settings_section.dart';
 import 'package:yelo_laundry_erp/features/settings/presentation/widgets/laundry_profile_settings_section.dart';
 import 'package:yelo_laundry_erp/features/settings/presentation/widgets/notification_settings_section.dart';
 import 'package:yelo_laundry_erp/features/settings/presentation/widgets/order_settings_section.dart';
@@ -59,6 +60,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           AppSpacing.s32,
         ),
         children: [
+          const SystemConfigSettingsSection(),
+          const SizedBox(height: AppSpacing.s16),
           const LaundryProfileSettingsSection(),
           const SizedBox(height: AppSpacing.s16),
           NotificationSettingsSection(

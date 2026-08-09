@@ -1,5 +1,26 @@
 import { Prisma } from '@prisma/client';
 
+const SEED_DEFAULT_DOCUMENT_RULES = {
+  maxFileSizeBytes: 10 * 1024 * 1024,
+  allowedMimeTypes: ['image/jpeg', 'image/png', 'application/pdf'],
+  compressionMode: 'original',
+  ocrEnabled: false,
+} as const;
+
+const SEED_DEFAULT_BACKUP_SETTINGS = {
+  enabled: false,
+  schedule: 'daily',
+  retentionDays: 30,
+} as const;
+
+const SEED_DEFAULT_NOTIFICATION_SETTINGS = {
+  notify_new_order: true,
+  notify_payment: true,
+  notify_ironing_finished: true,
+  notify_pickup_delivery: true,
+  notify_wallet: true,
+} as const;
+
 /** Default unit prices (IDR) keyed by service code. */
 export const DEFAULT_SERVICE_PRICES: Record<string, number> = {
   CKS: 7000,
@@ -93,4 +114,79 @@ export async function seedDefaultAttendanceSetting(
   });
 
   return 'created';
+}
+
+const ADMIN_TIMEZONE_KEY = 'admin.timezone';
+const ADMIN_CURRENCY_KEY = 'admin.currency';
+
+export async function seedSystemSettingIfAbsent(
+  tx: Prisma.TransactionClient,
+  key: string,
+  value: string,
+  description: string,
+): Promise<'created' | 'existing'> {
+  const existing = await tx.systemSetting.findUnique({
+    where: { settingKey: key },
+    select: { id: true },
+  });
+
+  if (existing) {
+    return 'existing';
+  }
+
+  await tx.systemSetting.create({
+    data: {
+      settingKey: key,
+      settingValue: value,
+      description,
+    },
+  });
+
+  return 'created';
+}
+
+export async function seedDefaultPhase3Settings(
+  tx: Prisma.TransactionClient,
+): Promise<{
+  documents: 'created' | 'existing';
+  backup: 'created' | 'existing';
+  notifications: 'created' | 'existing';
+  timezone: 'created' | 'existing';
+  currency: 'created' | 'existing';
+}> {
+  const [documents, backup, notifications, timezone, currency] =
+    await Promise.all([
+      seedSystemSettingIfAbsent(
+        tx,
+        'documents.rules',
+        JSON.stringify(SEED_DEFAULT_DOCUMENT_RULES),
+        'Document upload rules',
+      ),
+      seedSystemSettingIfAbsent(
+        tx,
+        'backup.settings',
+        JSON.stringify(SEED_DEFAULT_BACKUP_SETTINGS),
+        'Backup configuration',
+      ),
+      seedSystemSettingIfAbsent(
+        tx,
+        'notification.settings',
+        JSON.stringify(SEED_DEFAULT_NOTIFICATION_SETTINGS),
+        'Notification outlet toggles',
+      ),
+      seedSystemSettingIfAbsent(
+        tx,
+        ADMIN_TIMEZONE_KEY,
+        'Asia/Jakarta',
+        'Company timezone',
+      ),
+      seedSystemSettingIfAbsent(
+        tx,
+        ADMIN_CURRENCY_KEY,
+        'IDR',
+        'Company currency',
+      ),
+    ]);
+
+  return { documents, backup, notifications, timezone, currency };
 }

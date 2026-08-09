@@ -14,7 +14,7 @@ class LaundryProfileSettingsSection extends StatelessWidget {
         SettingsNavigationTile(
           title: 'Profil Laundry',
           showDivider: false,
-          onTap: () => context.push('/settings/laundry-profile'),
+          onTap: () => context.push('/settings/company'),
         ),
       ],
     );

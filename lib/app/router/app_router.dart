@@ -52,7 +52,8 @@ import 'package:yelo_laundry_erp/features/reports/presentation/reports_screen.da
 import 'package:yelo_laundry_erp/features/receipt/models/laundry_receipt.dart';
 import 'package:yelo_laundry_erp/features/receipt/presentation/laundry_receipt_screen.dart';
 import 'package:yelo_laundry_erp/features/settings/presentation/order_number_settings_screen.dart';
-import 'package:yelo_laundry_erp/features/settings/presentation/laundry_profile_screen.dart';
+import 'package:yelo_laundry_erp/features/settings/presentation/company_settings_screen.dart';
+import 'package:yelo_laundry_erp/features/settings/presentation/system_settings_screens.dart';
 import 'package:yelo_laundry_erp/features/settings/presentation/receipt_customization_screen.dart';
 import 'package:yelo_laundry_erp/features/settings/presentation/settings_screen.dart';
 import 'package:yelo_laundry_erp/features/splash/presentation/splash_screen.dart';
@@ -429,8 +430,32 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       },
     ),
     GoRoute(
+      path: '/settings/company',
+      builder: (context, state) => const CompanySettingsScreen(),
+    ),
+    GoRoute(
       path: '/settings/laundry-profile',
-      builder: (context, state) => const LaundryProfileScreen(),
+      builder: (context, state) => const CompanySettingsScreen(),
+    ),
+    GoRoute(
+      path: '/settings/attendance-config',
+      builder: (context, state) => const AttendanceSettingsScreen(),
+    ),
+    GoRoute(
+      path: '/settings/documents-config',
+      builder: (context, state) => const DocumentsSettingsScreen(),
+    ),
+    GoRoute(
+      path: '/settings/notifications-config',
+      builder: (context, state) => const NotificationsConfigScreen(),
+    ),
+    GoRoute(
+      path: '/settings/backup-config',
+      builder: (context, state) => const BackupSettingsScreen(),
+    ),
+    GoRoute(
+      path: '/settings/delivery-config',
+      builder: (context, state) => const DeliverySettingsScreen(),
     ),
     GoRoute(
       path: '/settings/receipt-customization',

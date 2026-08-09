@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { RoleCode } from '@prisma/client';
 import { ROLES } from '../auth/constants/roles.constant';
+import { NotificationConfigService } from '../settings/config/notification-config.service';
 import {
   API_NOTIFICATION_PRIORITIES,
   API_NOTIFICATION_TYPES,
@@ -50,6 +51,7 @@ export class NotificationEventService {
     private readonly templateService: NotificationTemplateService,
     private readonly dispatcher: NotificationDispatcherService,
     private readonly auditService: NotificationAuditService,
+    private readonly notificationConfigService: NotificationConfigService,
   ) {}
 
   async publish(payload: NotificationEventPayload): Promise<void> {
@@ -59,6 +61,16 @@ export class NotificationEventService {
 
     if (deduplicateKey && (await this.repository.isEventProcessed(deduplicateKey))) {
       this.logger.debug(`Skipping duplicate notification event: ${deduplicateKey}`);
+      return;
+    }
+
+    const isEnabled = await this.notificationConfigService.isTemplateCodeEnabled(
+      payload.templateCode,
+    );
+    if (!isEnabled) {
+      this.logger.debug(
+        `Skipping notification event ${payload.templateCode}: outlet toggle disabled`,
+      );
       return;
     }
 

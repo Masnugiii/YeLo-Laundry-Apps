@@ -4,10 +4,12 @@ import { Type } from 'class-transformer';
 import { IsOptional } from 'class-validator';
 import { ROLES } from '../auth/constants/roles.constant';
 import { PERMISSIONS } from '../auth/constants/permissions.constant';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { AuthenticatedEmployee } from '../auth/interfaces/jwt-payload.interface';
+import { SettingsService } from '../settings/settings.service';
 import { AdminDashboardService } from './admin-dashboard.service';
-import { AdminSettingsService } from './admin-settings.service';
 import { AuditLogService } from './audit-log.service';
 
 class AuditQueryDto {
@@ -37,7 +39,7 @@ export class AdminController {
   constructor(
     private readonly dashboardService: AdminDashboardService,
     private readonly auditLogService: AuditLogService,
-    private readonly settingsService: AdminSettingsService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   @Get('dashboard')
@@ -68,7 +70,7 @@ export class AdminController {
   @Permissions(PERMISSIONS.SETTINGS)
   @ApiOperation({ summary: 'Get company settings' })
   async getSettings() {
-    const data = await this.settingsService.getCompanySettings();
+    const data = await this.settingsService.getSection('company');
     return {
       success: true,
       message: 'Company settings retrieved successfully',
@@ -80,12 +82,19 @@ export class AdminController {
   @Roles(ROLES.OWNER)
   @Permissions(PERMISSIONS.SETTINGS)
   @ApiOperation({ summary: 'Update company settings (OWNER only)' })
-  async updateSettings(@Body() body: Record<string, unknown>) {
-    const data = await this.settingsService.updateCompanySettings(body);
+  async updateSettings(
+    @Body() body: Record<string, unknown>,
+    @CurrentUser() user: AuthenticatedEmployee,
+  ) {
+    const result = await this.settingsService.updateSection(
+      'company',
+      body,
+      user.employeeId,
+    );
     return {
       success: true,
       message: 'Company settings updated successfully',
-      data,
+      data: result.data,
     };
   }
 }

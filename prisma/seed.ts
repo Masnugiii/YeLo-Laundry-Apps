@@ -2,6 +2,7 @@ import { PrismaClient, RoleCode, ServiceUnitType } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import {
   seedDefaultAttendanceSetting,
+  seedDefaultPhase3Settings,
   seedDefaultServicePrices,
 } from './seed-settings.helpers';
 import { seedDefaultNumberingSequences } from './seed-numbering.helpers';
@@ -247,6 +248,7 @@ async function main() {
       SERVICES.map((service) => service.serviceCode),
     );
     await seedDefaultAttendanceSetting(tx);
+    await seedDefaultPhase3Settings(tx);
     await seedDefaultNumberingSequences(tx);
 
     const existingQueue = await tx.queueSetting.findFirst();
