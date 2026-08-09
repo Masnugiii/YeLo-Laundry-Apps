@@ -1,20 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
-import 'package:yelo_laundry_erp/features/employee_performance/data/dummy_employee_performance_data.dart';
 import 'package:yelo_laundry_erp/features/employee_performance/presentation/performance_theme.dart';
-import 'package:yelo_laundry_erp/features/employee_performance/presentation/widgets/ai_performance_insight_card.dart';
-import 'package:yelo_laundry_erp/features/employee_performance/presentation/widgets/auto_calculation_note.dart';
-import 'package:yelo_laundry_erp/features/employee_performance/presentation/widgets/auto_rating_info_card.dart';
 import 'package:yelo_laundry_erp/features/employee_performance/presentation/widgets/employee_performance_list_card.dart';
-import 'package:yelo_laundry_erp/features/employee_performance/presentation/widgets/monthly_leaderboard.dart';
 import 'package:yelo_laundry_erp/features/employee_performance/presentation/widgets/performance_summary_card.dart';
-import 'package:yelo_laundry_erp/features/employee_performance/presentation/widgets/point_rule_cards.dart';
+import 'package:yelo_laundry_erp/features/employee_performance/providers/employee_performance_provider.dart';
+import 'package:yelo_laundry_erp/shared/widgets/api_state_widgets.dart';
 
-class EmployeePerformanceScreen extends StatelessWidget {
+class EmployeePerformanceScreen extends ConsumerWidget {
   const EmployeePerformanceScreen({
     super.key,
     this.showBackButton = true,
@@ -23,8 +20,8 @@ class EmployeePerformanceScreen extends StatelessWidget {
   final bool showBackButton;
 
   @override
-  Widget build(BuildContext context) {
-    final employees = dummyEmployeeOverviews;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final performanceAsync = ref.watch(employeePerformanceProvider);
 
     return Scaffold(
       backgroundColor: AppColors.dashboardBackground,
@@ -43,38 +40,51 @@ class EmployeePerformanceScreen extends StatelessWidget {
           ),
         ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.s20,
-          AppSpacing.s20,
-          AppSpacing.s20,
-          AppSpacing.s32,
+      body: performanceAsync.when(
+        loading: () => const ApiLoadingView(),
+        error: (error, _) => ApiErrorView(
+          message: messageFromError(error),
+          onRetry: () => ref.invalidate(employeePerformanceProvider),
         ),
-        children: [
-          const AutoRatingInfoCard(),
-          const SizedBox(height: AppSpacing.s16),
-          const PerformanceSummaryCard(summary: performanceSummary),
-          const SizedBox(height: AppSpacing.s24),
-          Text('Daftar Karyawan', style: PerformanceTheme.sectionTitleStyle),
-          const SizedBox(height: AppSpacing.s12),
-          for (var i = 0; i < employees.length; i++) ...[
-            if (i > 0) const SizedBox(height: AppSpacing.s12),
-            EmployeePerformanceListCard(
-              employee: employees[i],
-              onTap: () => context.push(
-                '/employee-performance/${employees[i].id}',
-              ),
+        data: (data) => RefreshIndicator(
+          onRefresh: () async {
+            ref.invalidate(employeePerformanceProvider);
+            await ref.read(employeePerformanceProvider.future);
+          },
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.s20,
+              AppSpacing.s20,
+              AppSpacing.s20,
+              AppSpacing.s32,
             ),
-          ],
-          const SizedBox(height: AppSpacing.s24),
-          const PointRuleCards(rules: pointRules),
-          const SizedBox(height: AppSpacing.s16),
-          const MonthlyLeaderboard(entries: monthlyLeaderboard),
-          const SizedBox(height: AppSpacing.s16),
-          const AiPerformanceInsightCard(insights: aiPerformanceInsights),
-          const SizedBox(height: AppSpacing.s16),
-          const AutoCalculationNote(),
-        ],
+            children: [
+              PerformanceSummaryCard(summary: data.summary),
+              const SizedBox(height: AppSpacing.s24),
+              Text('Daftar Karyawan', style: PerformanceTheme.sectionTitleStyle),
+              const SizedBox(height: AppSpacing.s12),
+              if (data.employees.isEmpty)
+                Text(
+                  'Belum ada data kinerja untuk periode ini.',
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    color: AppColors.textSecondary,
+                  ),
+                )
+              else
+                for (var i = 0; i < data.employees.length; i++) ...[
+                  if (i > 0) const SizedBox(height: AppSpacing.s12),
+                  EmployeePerformanceListCard(
+                    employee: data.employees[i],
+                    onTap: () => context.push(
+                      '/employee-performance/${data.employees[i].id}',
+                    ),
+                  ),
+                ],
+            ],
+          ),
+        ),
       ),
     );
   }

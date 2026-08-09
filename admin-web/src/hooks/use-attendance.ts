@@ -26,3 +26,11 @@ export function useAttendance(params: AttendanceListParams) {
       ),
   });
 }
+
+export function useAttendanceDetail(id: string, enabled = true) {
+  return useQuery({
+    queryKey: [ATTENDANCE_QUERY_KEY, "detail", id],
+    queryFn: () => apiGet<AttendanceRecord>(`/attendance/${id}`),
+    enabled: enabled && Boolean(id),
+  });
+}

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { EmployeeRoleBadges } from "@/components/employees/employee-role-badges";
+import { EmployeeStatisticsCards } from "@/components/employees/employee-statistics-cards";
 import { EmployeeStatusBadge } from "@/components/employees/employee-status-badge";
 import {
   EmptyState,
@@ -11,7 +12,7 @@ import {
 } from "@/components/employees/list-states";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useEmployees } from "@/hooks/use-employees";
+import { useEmployees, useEmployeeStatistics } from "@/hooks/use-employees";
 import { getErrorMessage } from "@/lib/errors";
 import { formatDate } from "@/lib/utils";
 import {
@@ -51,6 +52,7 @@ export default function EmployeesPage() {
   };
 
   const { data, isLoading, isError, error, refetch } = useEmployees(params);
+  const statisticsQuery = useEmployeeStatistics();
 
   if (isLoading) {
     return <EmployeeListSkeleton />;
@@ -72,6 +74,10 @@ export default function EmployeesPage() {
 
   return (
     <div className="space-y-4">
+      {statisticsQuery.data ? (
+        <EmployeeStatisticsCards data={statisticsQuery.data} />
+      ) : null}
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="grid flex-1 gap-3 md:grid-cols-4">
           <Input

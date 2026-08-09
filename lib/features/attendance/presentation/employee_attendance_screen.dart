@@ -6,12 +6,11 @@ import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
 import 'package:yelo_laundry_erp/core/providers/core_providers.dart';
 import 'package:yelo_laundry_erp/features/attendance/data/attendance_mapper.dart';
-import 'package:yelo_laundry_erp/features/attendance/data/dummy_attendance_data.dart';
 import 'package:yelo_laundry_erp/features/attendance/models/attendance_models.dart';
 import 'package:yelo_laundry_erp/features/attendance/presentation/attendance_theme.dart';
+import 'package:yelo_laundry_erp/features/attendance/presentation/widgets/attendance_detail_sheet.dart';
 import 'package:yelo_laundry_erp/features/attendance/presentation/widgets/attendance_summary_grid.dart';
 import 'package:yelo_laundry_erp/features/attendance/presentation/widgets/employee_attendance_card.dart';
-import 'package:yelo_laundry_erp/features/attendance/presentation/widgets/eppos_integration_card.dart';
 import 'package:yelo_laundry_erp/shared/widgets/api_state_widgets.dart';
 
 class EmployeeAttendanceScreen extends ConsumerStatefulWidget {
@@ -31,7 +30,12 @@ class _EmployeeAttendanceScreenState
     extends ConsumerState<EmployeeAttendanceScreen> {
   bool _loading = true;
   String? _error;
-  var _summary = attendanceSummary;
+  var _summary = const AttendanceSummary(
+    presentToday: 0,
+    lateToday: 0,
+    leaveToday: 0,
+    notCheckedIn: 0,
+  );
   List<EmployeeAttendanceRecord> _records = const [];
 
   @override
@@ -50,7 +54,7 @@ class _EmployeeAttendanceScreenState
       final repository = ref.read(attendanceRepositoryProvider);
       final results = await Future.wait([
         repository.fetchDashboard(),
-        repository.fetchHistory(),
+        repository.fetchHistory(limit: 50),
       ]);
 
       if (!mounted) return;
@@ -62,12 +66,31 @@ class _EmployeeAttendanceScreenState
             .toList();
         _loading = false;
       });
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = 'Gagal memuat data kehadiran.';
+        _error = messageFromError(error);
       });
+    }
+  }
+
+  Future<void> _openDetail(EmployeeAttendanceRecord record) async {
+    try {
+      final detail = await ref
+          .read(attendanceRepositoryProvider)
+          .fetchDetail(record.id);
+      if (!mounted) return;
+      showAttendanceDetailSheet(
+        context,
+        record: record,
+        detail: detail,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(messageFromError(error))),
+      );
     }
   }
 
@@ -109,8 +132,6 @@ class _EmployeeAttendanceScreenState
                     ),
                     children: [
                       AttendanceSummaryGrid(summary: _summary),
-                      const SizedBox(height: AppSpacing.s16),
-                      EpposIntegrationCard(syncStatus: epposSyncStatus),
                       const SizedBox(height: AppSpacing.s24),
                       Text(
                         'Daftar Kehadiran',
@@ -118,7 +139,7 @@ class _EmployeeAttendanceScreenState
                       ),
                       const SizedBox(height: AppSpacing.s8),
                       Text(
-                        'Data absensi hari ini — siap disinkronkan dengan mesin fingerprint EPPOS.',
+                        'Data absensi dari sistem backend.',
                         style: AttendanceTheme.labelStyle,
                       ),
                       const SizedBox(height: AppSpacing.s16),
@@ -136,7 +157,10 @@ class _EmployeeAttendanceScreenState
                       else
                         for (var i = 0; i < _records.length; i++) ...[
                           if (i > 0) const SizedBox(height: AppSpacing.s12),
-                          EmployeeAttendanceCard(record: _records[i]),
+                          EmployeeAttendanceCard(
+                            record: _records[i],
+                            onTap: () => _openDetail(_records[i]),
+                          ),
                         ],
                     ],
                   ),

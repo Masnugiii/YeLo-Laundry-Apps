@@ -10,6 +10,7 @@ import type {
   CreateEmployeeInput,
   Employee,
   EmployeeListParams,
+  EmployeeStatistics,
   ResetEmployeePasswordInput,
   UpdateEmployeeInput,
 } from "@/types/employee";
@@ -67,6 +68,13 @@ export function useEmployees(params: EmployeeListParams) {
         "/employees",
         params as Record<string, unknown>,
       ),
+  });
+}
+
+export function useEmployeeStatistics() {
+  return useQuery({
+    queryKey: [EMPLOYEES_QUERY_KEY, "statistics"],
+    queryFn: () => apiGet<EmployeeStatistics>("/employees/statistics"),
   });
 }
 

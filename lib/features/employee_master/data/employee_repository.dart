@@ -40,6 +40,62 @@ class EmployeeRepository {
     return _mapEmployee(data);
   }
 
+  Future<Map<String, dynamic>> fetchStatistics() async {
+    return _apiClient.get<Map<String, dynamic>>(
+      '/employees/statistics',
+      parser: (json) => json as Map<String, dynamic>,
+    );
+  }
+
+  Future<String> fetchSuggestedEmployeeCode() async {
+    final data = await _apiClient.get<Map<String, dynamic>>(
+      '/numbering/EMP',
+      parser: (json) => json as Map<String, dynamic>,
+    );
+
+    final prefix = data['prefix'] as String? ?? 'EMP';
+    final padding = (data['padding'] as num?)?.toInt() ?? 4;
+    final counter = (data['currentCounter'] as num?)?.toInt() ?? 0;
+    final dailyReset = data['dailyReset'] as bool? ?? false;
+    final next = counter + 1;
+    final padded = next.toString().padLeft(padding, '0');
+
+    if (dailyReset) {
+      final now = DateTime.now();
+      final datePart =
+          '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
+      return '$prefix-$datePart-$padded';
+    }
+
+    return '$prefix-$padded';
+  }
+
+  Future<Employee> createEmployee({
+    required String employeeCode,
+    required String fullName,
+    required String phone,
+    required String password,
+    String? email,
+    String? position,
+    String status = 'ACTIVE',
+  }) async {
+    final data = await _apiClient.post<Map<String, dynamic>>(
+      '/employees',
+      data: {
+        'employeeCode': employeeCode,
+        'fullName': fullName,
+        'phone': phone,
+        'password': password,
+        if (email != null && email.isNotEmpty) 'email': email,
+        if (position != null && position.isNotEmpty) 'position': position,
+        'status': status,
+      },
+      parser: (json) => json as Map<String, dynamic>,
+    );
+
+    return _mapEmployee(data);
+  }
+
   Employee _mapEmployee(Map<String, dynamic> json) {
     final fullName = json['fullName'] as String? ?? '';
     final roles = (json['roles'] as List<dynamic>? ?? const [])
@@ -52,7 +108,7 @@ class EmployeeRepository {
       fullName: fullName,
       initials: _initials(fullName),
       role: _mapRole(roles),
-      status: json['status'] == 'active'
+      status: (json['status'] as String? ?? '').toUpperCase() == 'ACTIVE'
           ? EmployeeStatus.active
           : EmployeeStatus.inactive,
       phone: json['phone'] as String? ?? '',
@@ -71,6 +127,8 @@ class EmployeeRepository {
     if (roles.contains('OWNER')) return EmployeeRole.owner;
     if (roles.contains('MANAGER')) return EmployeeRole.manager;
     if (roles.contains('BINATU')) return EmployeeRole.binatu;
+    if (roles.contains('DRIVER')) return EmployeeRole.kasir;
+    if (roles.contains('OPERATOR')) return EmployeeRole.kasir;
     return EmployeeRole.kasir;
   }
 

@@ -2,19 +2,22 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { useCreateEmployee } from "@/hooks/use-employees";
+import { useNumberingConfigurations } from "@/hooks/use-master-data";
 import { getErrorMessage } from "@/lib/errors";
+import { suggestNextEmployeeCode } from "@/lib/employee-code";
 import { EMPLOYEE_STATUSES, type EmployeeStatus } from "@/types/employee";
 
 export default function NewEmployeePage() {
   const router = useRouter();
   const toast = useToast();
   const createEmployee = useCreateEmployee();
+  const numberingQuery = useNumberingConfigurations();
 
   const [form, setForm] = useState({
     employeeCode: "",
@@ -25,6 +28,15 @@ export default function NewEmployeePage() {
     position: "Staff",
     status: "ACTIVE" as EmployeeStatus,
   });
+
+  useEffect(() => {
+    const empConfig = numberingQuery.data?.find((item) => item.type === "EMP");
+    if (!empConfig || form.employeeCode) return;
+    setForm((current) => ({
+      ...current,
+      employeeCode: suggestNextEmployeeCode(empConfig),
+    }));
+  }, [form.employeeCode, numberingQuery.data]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

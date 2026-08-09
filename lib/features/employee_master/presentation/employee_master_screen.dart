@@ -1,36 +1,33 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
-import 'package:yelo_laundry_erp/features/employee_master/data/dummy_employees.dart';
 import 'package:yelo_laundry_erp/features/employee_master/models/employee.dart';
 import 'package:yelo_laundry_erp/features/employee_master/presentation/employee_master_theme.dart';
 import 'package:yelo_laundry_erp/features/employee_master/presentation/widgets/add_employee_bottom_sheet.dart';
 import 'package:yelo_laundry_erp/features/employee_master/presentation/widgets/employee_card.dart';
 import 'package:yelo_laundry_erp/features/employee_master/presentation/widgets/employee_summary_grid.dart';
+import 'package:yelo_laundry_erp/features/employee_master/providers/employee_providers.dart';
+import 'package:yelo_laundry_erp/shared/widgets/api_state_widgets.dart';
 import 'package:yelo_laundry_erp/shared/widgets/selectable_chip.dart';
 
-class EmployeeMasterScreen extends StatefulWidget {
+class EmployeeMasterScreen extends ConsumerStatefulWidget {
   const EmployeeMasterScreen({super.key});
 
   @override
-  State<EmployeeMasterScreen> createState() => _EmployeeMasterScreenState();
+  ConsumerState<EmployeeMasterScreen> createState() =>
+      _EmployeeMasterScreenState();
 }
 
-class _EmployeeMasterScreenState extends State<EmployeeMasterScreen> {
+class _EmployeeMasterScreenState extends ConsumerState<EmployeeMasterScreen> {
   static const _filters = EmployeeFilter.values;
 
   final _searchController = TextEditingController();
-  late List<Employee> _employees;
   EmployeeFilter _selectedFilter = EmployeeFilter.all;
-
-  @override
-  void initState() {
-    super.initState();
-    _employees = List<Employee>.from(initialDummyEmployees());
-  }
+  String _search = '';
 
   @override
   void dispose() {
@@ -38,16 +35,13 @@ class _EmployeeMasterScreenState extends State<EmployeeMasterScreen> {
     super.dispose();
   }
 
-  void _addEmployee(Employee employee) {
-    addEmployeeToStore(employee);
-    setState(() => _employees = List<Employee>.from(initialDummyEmployees()));
+  List<Employee> _filterEmployees(List<Employee> employees) {
+    return filterEmployees(
+      employees: employees,
+      query: _search,
+      filter: _selectedFilter,
+    );
   }
-
-  List<Employee> get _filteredEmployees => filterEmployees(
-        employees: _employees,
-        query: _searchController.text,
-        filter: _selectedFilter,
-      );
 
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
@@ -68,16 +62,29 @@ class _EmployeeMasterScreenState extends State<EmployeeMasterScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final filtered = _filteredEmployees;
-    final summary = computeEmployeeSummary(_employees);
+    final employeesAsync = ref.watch(employeeListProvider(_search));
+    final statisticsAsync = ref.watch(employeeStatisticsProvider);
 
     return Scaffold(
       backgroundColor: AppColors.dashboardBackground,
       appBar: _buildAppBar(),
-      body: Column(
-        children: [
-          Expanded(
+      body: employeesAsync.when(
+        loading: () => const ApiLoadingView(),
+        error: (error, _) => ApiErrorView(
+          message: messageFromError(error),
+          onRetry: () => ref.invalidate(employeeListProvider(_search)),
+        ),
+        data: (employees) {
+          final filtered = _filterEmployees(employees);
+
+          return RefreshIndicator(
+            onRefresh: () async {
+              ref.invalidate(employeeListProvider(_search));
+              ref.invalidate(employeeStatisticsProvider);
+              await ref.read(employeeListProvider(_search).future);
+            },
             child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(
                 AppSpacing.s20,
                 AppSpacing.s20,
@@ -85,7 +92,16 @@ class _EmployeeMasterScreenState extends State<EmployeeMasterScreen> {
                 AppSpacing.s32,
               ),
               children: [
-                EmployeeSummaryGrid(summary: summary),
+                statisticsAsync.when(
+                  loading: () => const SizedBox(
+                    height: 120,
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                  error: (_, __) => EmployeeSummaryGrid(
+                    summary: computeEmployeeSummary(employees),
+                  ),
+                  data: (summary) => EmployeeSummaryGrid(summary: summary),
+                ),
                 const SizedBox(height: AppSpacing.s20),
                 Row(
                   children: [
@@ -93,8 +109,11 @@ class _EmployeeMasterScreenState extends State<EmployeeMasterScreen> {
                       child: FilledButton.icon(
                         onPressed: () => showAddEmployeeBottomSheet(
                           context,
-                          onSaved: _addEmployee,
-                          nextEmployeeNumber: _employees.length + 1,
+                          ref: ref,
+                          onSaved: () {
+                            ref.invalidate(employeeListProvider(_search));
+                            ref.invalidate(employeeStatisticsProvider);
+                          },
                         ),
                         icon: const Icon(Icons.add, color: AppColors.onPrimary),
                         label: Text(
@@ -114,29 +133,6 @@ class _EmployeeMasterScreenState extends State<EmployeeMasterScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(width: AppSpacing.s12),
-                    OutlinedButton.icon(
-                      onPressed: () {},
-                      icon: const Icon(Icons.filter_list, color: AppColors.primary),
-                      label: Text(
-                        'Filter',
-                        style: GoogleFonts.poppins(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.s16,
-                          vertical: 14,
-                        ),
-                        side: const BorderSide(color: AppColors.primary, width: 1.5),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
                   ],
                 ),
                 const SizedBox(height: AppSpacing.s16),
@@ -150,7 +146,7 @@ class _EmployeeMasterScreenState extends State<EmployeeMasterScreen> {
                 const SizedBox(height: AppSpacing.s8),
                 TextField(
                   controller: _searchController,
-                  onChanged: (_) => setState(() {}),
+                  onChanged: (value) => setState(() => _search = value.trim()),
                   style: GoogleFonts.poppins(
                     fontSize: 15,
                     color: AppColors.textPrimary,
@@ -189,7 +185,8 @@ class _EmployeeMasterScreenState extends State<EmployeeMasterScreen> {
                 ],
                 if (filtered.isEmpty)
                   Padding(
-                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.s32),
+                    padding:
+                        const EdgeInsets.symmetric(vertical: AppSpacing.s32),
                     child: Center(
                       child: Text(
                         'Karyawan tidak ditemukan',
@@ -203,8 +200,8 @@ class _EmployeeMasterScreenState extends State<EmployeeMasterScreen> {
                   ),
               ],
             ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }

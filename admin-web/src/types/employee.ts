@@ -44,6 +44,17 @@ export interface EmployeeListParams {
   sortOrder?: "asc" | "desc";
 }
 
+export interface EmployeeStatistics {
+  totalEmployees: number;
+  activeEmployees: number;
+  inactiveEmployees: number;
+  managers: number;
+  cashiers: number;
+  operators: number;
+  drivers: number;
+  binatu: number;
+}
+
 export interface UpdateEmployeeInput {
   employeeCode?: string;
   fullName?: string;

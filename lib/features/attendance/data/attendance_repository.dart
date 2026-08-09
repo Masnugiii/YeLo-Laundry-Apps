@@ -42,4 +42,11 @@ class AttendanceRepository {
         .map((item) => item as Map<String, dynamic>)
         .toList();
   }
+
+  Future<Map<String, dynamic>> fetchDetail(String id) async {
+    return _apiClient.get<Map<String, dynamic>>(
+      '/attendance/$id',
+      parser: (json) => json as Map<String, dynamic>,
+    );
+  }
 }

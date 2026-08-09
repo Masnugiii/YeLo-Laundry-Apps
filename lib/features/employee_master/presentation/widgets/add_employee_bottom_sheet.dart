@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
+import 'package:yelo_laundry_erp/core/providers/core_providers.dart';
 import 'package:yelo_laundry_erp/features/employee_master/models/employee.dart';
 import 'package:yelo_laundry_erp/features/employee_master/presentation/employee_master_theme.dart';
+import 'package:yelo_laundry_erp/features/employee_master/providers/employee_providers.dart';
 
 void showAddEmployeeBottomSheet(
   BuildContext context, {
-  required ValueChanged<Employee> onSaved,
-  required int nextEmployeeNumber,
+  required WidgetRef ref,
+  required VoidCallback onSaved,
 }) {
   showModalBottomSheet<void>(
     context: context,
@@ -20,43 +23,54 @@ void showAddEmployeeBottomSheet(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
     builder: (context) => _AddEmployeeBottomSheet(
+      ref: ref,
       onSaved: onSaved,
-      nextEmployeeNumber: nextEmployeeNumber,
     ),
   );
 }
 
-class _AddEmployeeBottomSheet extends StatefulWidget {
+class _AddEmployeeBottomSheet extends ConsumerStatefulWidget {
   const _AddEmployeeBottomSheet({
+    required this.ref,
     required this.onSaved,
-    required this.nextEmployeeNumber,
   });
 
-  final ValueChanged<Employee> onSaved;
-  final int nextEmployeeNumber;
+  final WidgetRef ref;
+  final VoidCallback onSaved;
 
   @override
-  State<_AddEmployeeBottomSheet> createState() =>
+  ConsumerState<_AddEmployeeBottomSheet> createState() =>
       _AddEmployeeBottomSheetState();
 }
 
-class _AddEmployeeBottomSheetState extends State<_AddEmployeeBottomSheet> {
+class _AddEmployeeBottomSheetState
+    extends ConsumerState<_AddEmployeeBottomSheet> {
   final _nameController = TextEditingController();
   final _employeeIdController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _passwordController = TextEditingController();
   final _addressController = TextEditingController();
 
-  EmployeeGender _gender = EmployeeGender.male;
   EmployeeRole _role = EmployeeRole.kasir;
   EmployeeStatus _status = EmployeeStatus.active;
-  final DateTime _birthDate = DateTime(1995, 1, 1);
-  final DateTime _joinDate = DateTime(2026, 8, 7);
+  bool _saving = false;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    _employeeIdController.text =
-        'EMP-${widget.nextEmployeeNumber.toString().padLeft(3, '0')}';
+    _loadSuggestedCode();
+  }
+
+  Future<void> _loadSuggestedCode() async {
+    try {
+      final code = await ref.read(suggestedEmployeeCodeProvider.future);
+      if (!mounted) return;
+      _employeeIdController.text = code;
+      setState(() {});
+    } catch (_) {
+      // Keep field empty if numbering config is unavailable.
+    }
   }
 
   @override
@@ -64,46 +78,47 @@ class _AddEmployeeBottomSheetState extends State<_AddEmployeeBottomSheet> {
     _nameController.dispose();
     _employeeIdController.dispose();
     _phoneController.dispose();
+    _passwordController.dispose();
     _addressController.dispose();
     super.dispose();
   }
 
-  String _initialsFromName(String name) {
-    final parts = name.trim().split(RegExp(r'\s+'));
-    if (parts.isEmpty) return '?';
-    if (parts.length == 1) {
-      return parts.first.substring(0, 1).toUpperCase();
-    }
-    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
-  }
-
-  void _save() {
+  Future<void> _save() async {
     final name = _nameController.text.trim();
-    if (name.isEmpty) return;
+    final phone = _phoneController.text.trim();
+    final password = _passwordController.text.trim();
+    final employeeCode = _employeeIdController.text.trim();
 
-    final employee = Employee(
-      id: 'emp-${DateTime.now().millisecondsSinceEpoch}',
-      employeeCode: _employeeIdController.text.trim(),
-      fullName: name,
-      initials: _initialsFromName(name),
-      role: _role,
-      status: _status,
-      phone: _phoneController.text.trim().isEmpty
-          ? '08xxxxxxxxxx'
-          : _phoneController.text.trim(),
-      gender: _gender,
-      dateOfBirth: _birthDate,
-      address: _addressController.text.trim().isEmpty
-          ? '-'
-          : _addressController.text.trim(),
-      joinDate: _joinDate,
-      emergencyContact: '-',
-      branch: 'Yelo Laundry Pusat',
-      position: _role.label,
-    );
+    if (name.isEmpty || phone.isEmpty || password.length < 6 || employeeCode.isEmpty) {
+      setState(() => _error = 'Lengkapi nama, telepon, password (min 6), dan kode karyawan.');
+      return;
+    }
 
-    widget.onSaved(employee);
-    Navigator.pop(context);
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+
+    try {
+      await ref.read(employeeRepositoryProvider).createEmployee(
+            employeeCode: employeeCode,
+            fullName: name,
+            phone: phone,
+            password: password,
+            position: _role.label,
+            status: _status == EmployeeStatus.active ? 'ACTIVE' : 'INACTIVE',
+          );
+
+      if (!mounted) return;
+      widget.onSaved();
+      Navigator.pop(context);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = error.toString();
+      });
+    }
   }
 
   InputDecoration _fieldDecoration(String label) => InputDecoration(
@@ -149,22 +164,6 @@ class _AddEmployeeBottomSheetState extends State<_AddEmployeeBottomSheet> {
               ),
             ),
             const SizedBox(height: AppSpacing.s20),
-            Center(
-              child: CircleAvatar(
-                radius: 40,
-                backgroundColor: AppColors.primary.withValues(alpha: 0.12),
-                child: const Icon(
-                  Icons.camera_alt_outlined,
-                  color: AppColors.primary,
-                  size: 28,
-                ),
-              ),
-            ),
-            const SizedBox(height: AppSpacing.s8),
-            Center(
-              child: Text('Photo', style: EmployeeMasterTheme.labelStyle),
-            ),
-            const SizedBox(height: AppSpacing.s20),
             TextField(
               controller: _nameController,
               decoration: _fieldDecoration('Full Name'),
@@ -172,7 +171,7 @@ class _AddEmployeeBottomSheetState extends State<_AddEmployeeBottomSheet> {
             const SizedBox(height: AppSpacing.s12),
             TextField(
               controller: _employeeIdController,
-              decoration: _fieldDecoration('Employee ID'),
+              decoration: _fieldDecoration('Employee Code'),
             ),
             const SizedBox(height: AppSpacing.s12),
             TextField(
@@ -181,41 +180,27 @@ class _AddEmployeeBottomSheetState extends State<_AddEmployeeBottomSheet> {
               decoration: _fieldDecoration('Phone Number'),
             ),
             const SizedBox(height: AppSpacing.s12),
-            DropdownButtonFormField<EmployeeGender>(
-              initialValue: _gender,
-              decoration: _fieldDecoration('Gender'),
-              items: [
-                for (final gender in EmployeeGender.values)
-                  DropdownMenuItem(
-                    value: gender,
-                    child: Text(gender.label),
-                  ),
-              ],
-              onChanged: (value) {
-                if (value != null) setState(() => _gender = value);
-              },
-            ),
-            const SizedBox(height: AppSpacing.s12),
             TextField(
-              readOnly: true,
-              controller: TextEditingController(
-                text: formatEmployeeDate(_birthDate),
-              ),
-              decoration: _fieldDecoration('Birth Date'),
-              onTap: () {},
+              controller: _passwordController,
+              obscureText: true,
+              decoration: _fieldDecoration('Password'),
             ),
             const SizedBox(height: AppSpacing.s12),
             TextField(
               controller: _addressController,
               maxLines: 2,
-              decoration: _fieldDecoration('Address'),
+              decoration: _fieldDecoration('Address (opsional)'),
             ),
             const SizedBox(height: AppSpacing.s12),
             DropdownButtonFormField<EmployeeRole>(
               initialValue: _role,
               decoration: _fieldDecoration('Role'),
               items: [
-                for (final role in EmployeeRole.values)
+                for (final role in [
+                  EmployeeRole.kasir,
+                  EmployeeRole.binatu,
+                  EmployeeRole.manager,
+                ])
                   DropdownMenuItem(
                     value: role,
                     child: Text(role.label),
@@ -224,15 +209,6 @@ class _AddEmployeeBottomSheetState extends State<_AddEmployeeBottomSheet> {
               onChanged: (value) {
                 if (value != null) setState(() => _role = value);
               },
-            ),
-            const SizedBox(height: AppSpacing.s12),
-            TextField(
-              readOnly: true,
-              controller: TextEditingController(
-                text: formatEmployeeDate(_joinDate),
-              ),
-              decoration: _fieldDecoration('Join Date'),
-              onTap: () {},
             ),
             const SizedBox(height: AppSpacing.s12),
             DropdownButtonFormField<EmployeeStatus>(
@@ -249,9 +225,19 @@ class _AddEmployeeBottomSheetState extends State<_AddEmployeeBottomSheet> {
                 if (value != null) setState(() => _status = value);
               },
             ),
+            if (_error != null) ...[
+              const SizedBox(height: AppSpacing.s12),
+              Text(
+                _error!,
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  color: AppColors.error,
+                ),
+              ),
+            ],
             const SizedBox(height: AppSpacing.s24),
             FilledButton(
-              onPressed: _save,
+              onPressed: _saving ? null : _save,
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 padding: const EdgeInsets.symmetric(vertical: 16),
@@ -260,7 +246,7 @@ class _AddEmployeeBottomSheetState extends State<_AddEmployeeBottomSheet> {
                 ),
               ),
               child: Text(
-                'Save Employee',
+                _saving ? 'Menyimpan...' : 'Save Employee',
                 style: GoogleFonts.poppins(
                   fontSize: 15,
                   fontWeight: FontWeight.w600,

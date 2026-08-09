@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AttendanceDetailDialog } from "@/components/attendance/attendance-detail-dialog";
 import {
   EmptyState,
   FinanceListSkeleton,
@@ -13,7 +14,7 @@ import { useAttendance, useAttendanceDashboard } from "@/hooks/use-attendance";
 import { useEmployees } from "@/hooks/use-employees";
 import { getErrorMessage } from "@/lib/errors";
 import { formatDate } from "@/lib/utils";
-import type { AttendanceListParams } from "@/types/attendance";
+import type { AttendanceListParams, AttendanceRecord } from "@/types/attendance";
 
 const PAGE_SIZES = [10, 25, 50] as const;
 const ATTENDANCE_STATUSES = [
@@ -45,6 +46,9 @@ export default function AttendancePage() {
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState<(typeof PAGE_SIZES)[number]>(25);
+  const [selectedRecord, setSelectedRecord] = useState<AttendanceRecord | null>(
+    null,
+  );
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -192,6 +196,7 @@ export default function AttendancePage() {
                   "Late (min)",
                   "Overtime (min)",
                   "Status",
+                  "Action",
                 ].map((header) => (
                   <th
                     key={header}
@@ -224,6 +229,15 @@ export default function AttendancePage() {
                   <td className="px-4 py-3">{item.lateMinutes}</td>
                   <td className="px-4 py-3">{item.overtimeMinutes}</td>
                   <td className="px-4 py-3">{item.displayStatus}</td>
+                  <td className="px-4 py-3">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSelectedRecord(item)}
+                    >
+                      View
+                    </Button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -269,6 +283,13 @@ export default function AttendancePage() {
             </Button>
           </div>
         </div>
+      ) : null}
+
+      {selectedRecord ? (
+        <AttendanceDetailDialog
+          record={selectedRecord}
+          onClose={() => setSelectedRecord(null)}
+        />
       ) : null}
     </div>
   );

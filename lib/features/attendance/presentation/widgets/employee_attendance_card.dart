@@ -10,13 +10,20 @@ class EmployeeAttendanceCard extends StatelessWidget {
   const EmployeeAttendanceCard({
     super.key,
     required this.record,
+    this.onTap,
   });
 
   final EmployeeAttendanceRecord record;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: AttendanceTheme.cardDecoration.borderRadius,
+        child: Container(
       width: double.infinity,
       padding: const EdgeInsets.all(AppSpacing.s20),
       decoration: AttendanceTheme.cardDecoration,
@@ -103,6 +110,8 @@ class EmployeeAttendanceCard extends StatelessWidget {
             ),
           ],
         ],
+      ),
+        ),
       ),
     );
   }
