@@ -53,8 +53,8 @@ export class PayrollController {
   }
 
   @Patch('settings')
-  @Roles(...WRITE_ROLES)
-  @ApiOperation({ summary: 'Update payroll salary rules' })
+  @Roles(ROLES.OWNER)
+  @ApiOperation({ summary: 'Update payroll salary rules (OWNER only)' })
   updateSettings(
     @Body() dto: UpdatePayrollSettingsDto,
     @CurrentUser() user: AuthenticatedEmployee,

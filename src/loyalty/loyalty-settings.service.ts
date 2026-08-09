@@ -30,6 +30,7 @@ export class LoyaltySettingsService {
   async updateSettings(
     input: Partial<LoyaltySettings>,
     employeeId: string,
+    _options?: { skipAudit?: boolean },
   ): Promise<LoyaltySettings> {
     const current = await this.getSettings();
     const next = this.normalize({ ...current, ...input });

@@ -77,8 +77,9 @@ export class AdminController {
   }
 
   @Patch('settings/company')
+  @Roles(ROLES.OWNER)
   @Permissions(PERMISSIONS.SETTINGS)
-  @ApiOperation({ summary: 'Update company settings' })
+  @ApiOperation({ summary: 'Update company settings (OWNER only)' })
   async updateSettings(@Body() body: Record<string, unknown>) {
     const data = await this.settingsService.updateCompanySettings(body);
     return {

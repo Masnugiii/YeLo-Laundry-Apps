@@ -25,6 +25,7 @@ import { ReportsModule } from './reports/reports.module';
 import { PermissionModule } from './permission/permission.module';
 import { RbacModule } from './rbac/rbac.module';
 import { HealthModule } from './modules/health/health.module';
+import { SettingsModule } from './settings/settings.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { HealthModule } from './modules/health/health.module';
     LoyaltyModule,
     ReportsModule,
     PermissionModule,
+    SettingsModule,
   ],
   providers: [
     {

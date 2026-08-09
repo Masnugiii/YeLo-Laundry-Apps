@@ -27,6 +27,28 @@ export interface PaginatedAuditLogs {
 export class AuditLogService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async record(params: {
+    employeeId?: string;
+    module: string;
+    action: string;
+    referenceId?: string;
+    description?: string;
+    ipAddress?: string;
+    userAgent?: string;
+  }): Promise<void> {
+    await this.prisma.auditLog.create({
+      data: {
+        employeeId: params.employeeId,
+        module: params.module,
+        action: params.action,
+        referenceId: params.referenceId,
+        description: params.description,
+        ipAddress: params.ipAddress,
+        userAgent: params.userAgent,
+      },
+    });
+  }
+
   async findAll(query: {
     page?: number;
     limit?: number;

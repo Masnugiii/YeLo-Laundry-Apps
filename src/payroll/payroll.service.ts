@@ -51,6 +51,7 @@ export class PayrollService {
   async updateSettings(
     dto: Partial<PayrollSettings>,
     employeeId: string,
+    options?: { skipAudit?: boolean },
   ): Promise<PayrollSettings> {
     const current = await this.getSettings();
     const next = this.normalizeSettings({
@@ -72,12 +73,14 @@ export class PayrollService {
       update: { settingValue: JSON.stringify(next) },
     });
 
-    await this.auditService.log({
-      employeeId,
-      module: 'payroll',
-      action: 'update_settings',
-      description: 'Payroll settings updated',
-    });
+    if (!options?.skipAudit) {
+      await this.auditService.log({
+        employeeId,
+        module: 'payroll',
+        action: 'update_settings',
+        description: 'Payroll settings updated',
+      });
+    }
 
     return next;
   }

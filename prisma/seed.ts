@@ -1,5 +1,9 @@
 import { PrismaClient, RoleCode, ServiceUnitType } from '@prisma/client';
 import bcrypt from 'bcrypt';
+import {
+  seedDefaultAttendanceSetting,
+  seedDefaultServicePrices,
+} from './seed-settings.helpers';
 
 const prisma = new PrismaClient();
 
@@ -12,6 +16,7 @@ const PERMISSIONS = [
   { code: 'finance', name: 'Finance', module: 'finance' },
   { code: 'customers', name: 'Customers', module: 'customers' },
   { code: 'wallet', name: 'Wallet', module: 'wallet' },
+  { code: 'loyalty', name: 'Loyalty', module: 'loyalty' },
   { code: 'attendance', name: 'Attendance', module: 'attendance' },
   { code: 'ironing', name: 'Ironing', module: 'ironing' },
   { code: 'pickup', name: 'Pickup', module: 'pickup' },
@@ -44,6 +49,8 @@ const ROLE_PERMISSION_MAP: Record<RoleCode, readonly string[]> = {
     'orders',
     'finance',
     'reports',
+    'settings',
+    'loyalty',
     'attendance',
     'ironing',
     'pickup',
@@ -234,6 +241,12 @@ async function main() {
       });
     }
 
+    await seedDefaultServicePrices(
+      tx,
+      SERVICES.map((service) => service.serviceCode),
+    );
+    await seedDefaultAttendanceSetting(tx);
+
     const existingQueue = await tx.queueSetting.findFirst();
     if (existingQueue) {
       await tx.queueSetting.update({
@@ -383,10 +396,11 @@ async function main() {
 
   console.log('✅ Master data seeded successfully');
   console.log('   • 6 roles');
-  console.log('   • 12 permissions with role assignments');
+  console.log('   • 13 permissions with role assignments');
   console.log('   • 4 payment methods');
   console.log('   • 8 expense categories');
-  console.log('   • 6 service categories + 8 services');
+  console.log('   • 6 service categories + 8 services + default service prices');
+  console.log('   • Default attendance setting');
   console.log('   • Queue, receipt, and company settings');
   console.log('   • Default development accounts (password: admin123)');
   console.log('     - Owner: 081234567890');
