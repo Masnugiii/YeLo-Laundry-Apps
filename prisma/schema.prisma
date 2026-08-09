@@ -1,0 +1,1909 @@
+// Yelo Laundry ERP — Production PostgreSQL Schema
+// Reference: docs/02_ERD.md, docs/03_DATA_DICTIONARY.md, docs/04_BUSINESS_RULES.md, docs/06_BACKEND_ARCHITECTURE.md
+// Conventions: UUID PK (@default(uuid())), Decimal(15,2) for money, Timestamptz(6) for datetimes, soft delete via deletedAt
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+/// Employment and login account status.
+/// Aligns with users.status (active, inactive, suspended) and employees.status (resigned).
+enum EmployeeStatus {
+  active
+  inactive
+  suspended
+  resigned
+
+  @@map("employee_status")
+}
+
+/// System role codes.
+/// Display names: Owner, Kasir, Operator, Manajer, Binatu, Driver.
+enum RoleCode {
+  owner
+  cashier
+  cashier_laundry
+  cashier_laundry_driver
+  laundry
+  driver
+
+  @@map("role_code")
+}
+
+/// OTP request purpose.
+enum OtpPurpose {
+  login
+  register
+  password_reset
+
+  @@map("otp_purpose")
+}
+
+/// OTP verification lifecycle status.
+enum OtpStatus {
+  pending
+  verified
+  expired
+  failed
+
+  @@map("otp_status")
+}
+
+// ---------------------------------------------------------------------------
+// Employee
+// ---------------------------------------------------------------------------
+
+/// Consolidated employee identity and login account.
+/// Merges `users` auth fields with `employees` master data per auth module scope.
+model Employee {
+  id           String         @id @default(uuid()) @db.Uuid
+  employeeCode String         @unique @map("employee_code") @db.VarChar(20)
+  fullName     String         @map("full_name") @db.VarChar(150)
+  phone        String         @unique @db.VarChar(20)
+  email        String?        @unique @db.VarChar(150)
+  passwordHash String         @map("password_hash") @db.VarChar(255)
+  photoUrl     String?        @map("photo_url") @db.VarChar(500)
+  position     String         @db.VarChar(100)
+  status       EmployeeStatus @default(active)
+  hiredAt      DateTime?      @map("hired_at") @db.Date
+  lastLoginAt  DateTime?      @map("last_login_at") @db.Timestamptz(6)
+  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt    DateTime?      @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  employeeRoles           EmployeeRole[]           @relation("EmployeeRoles")
+  assignedRoles           EmployeeRole[]           @relation("RoleAssignedBy")
+  sessions                EmployeeSession[]
+  otpCodes                OtpCode[]
+  walletTransactions      WalletTransaction[]
+  rewardPoints            RewardPoint[]
+  customerNotes           CustomerNote[]
+  createdOrders           Order[]                  @relation("OrderCreatedBy")
+  updatedOrders           Order[]                  @relation("OrderUpdatedBy")
+  orderStatusChanges      OrderStatusHistory[]
+  orderPhotos             OrderPhoto[]
+  orderTimelines          OrderTimeline[]
+  receivedPayments        Payment[]                @relation("PaymentReceivedBy")
+  expenses                Expense[]
+  cashflows               Cashflow[]
+  attendances             Attendance[]
+  attendanceLogs          AttendanceLog[]
+  ironingJobs             IroningJob[]
+  ironingContributions    IroningContribution[]
+  pickupJobs              PickupJob[]              @relation("PickupJobDriver")
+  deliveryJobs            DeliveryJob[]            @relation("DeliveryJobDriver")
+  driverActivities        DriverActivity[]         @relation("DriverActivityDriver")
+  sentNotifications       Notification[]           @relation("NotificationSender")
+  notificationReads       NotificationRead[]
+  assignedCsTickets       CustomerServiceTicket[]  @relation("CsTicketAssignee")
+  customerServiceMessages CustomerServiceMessage[]
+  auditLogs               AuditLog[]
+  uploadedMediaFiles      MediaFile[]
+  payrollRecords          PayrollRecord[]
+  payrollApprovalEvents   PayrollApprovalEvent[] @relation("PayrollApprovalActor")
+  payrollPayments         PayrollPayment[]       @relation("PayrollPaymentActor")
+
+  @@index([status], map: "idx_employees_status")
+  @@index([deletedAt], map: "idx_employees_deleted_at")
+  @@index([fullName], map: "idx_employees_full_name")
+  @@map("employees")
+}
+
+// ---------------------------------------------------------------------------
+// Role
+// ---------------------------------------------------------------------------
+
+/// Defines system roles for RBAC.
+model Role {
+  id          String    @id @default(uuid()) @db.Uuid
+  code        RoleCode  @unique
+  name        String    @db.VarChar(100)
+  description String?   @db.Text
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  employeeRoles   EmployeeRole[]
+  rolePermissions RolePermission[]
+
+  @@index([isActive], map: "idx_roles_is_active")
+  @@index([deletedAt], map: "idx_roles_deleted_at")
+  @@map("roles")
+}
+
+// ---------------------------------------------------------------------------
+// Permission
+// ---------------------------------------------------------------------------
+
+/// Granular permission definitions for RBAC.
+model Permission {
+  id          String    @id @default(uuid()) @db.Uuid
+  code        String    @unique @db.VarChar(100)
+  name        String    @db.VarChar(150)
+  module      String    @db.VarChar(50)
+  description String?   @db.Text
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  rolePermissions RolePermission[]
+
+  @@index([module], map: "idx_permissions_module")
+  @@index([isActive], map: "idx_permissions_is_active")
+  @@index([deletedAt], map: "idx_permissions_deleted_at")
+  @@map("permissions")
+}
+
+// ---------------------------------------------------------------------------
+// EmployeeRole (junction: Employee ↔ Role)
+// ---------------------------------------------------------------------------
+
+/// Assigns one or more roles to an employee.
+/// Equivalent to `user_roles` in ERD, scoped to Employee.
+model EmployeeRole {
+  id                   String    @id @default(uuid()) @db.Uuid
+  employeeId           String    @map("employee_id") @db.Uuid
+  roleId               String    @map("role_id") @db.Uuid
+  assignedAt           DateTime  @default(now()) @map("assigned_at") @db.Timestamptz(6)
+  assignedByEmployeeId String?   @map("assigned_by_employee_id") @db.Uuid
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt            DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  employee   Employee  @relation("EmployeeRoles", fields: [employeeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  role       Role      @relation(fields: [roleId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  assignedBy Employee? @relation("RoleAssignedBy", fields: [assignedByEmployeeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@unique([employeeId, roleId], map: "idx_employee_roles_unique")
+  @@index([employeeId], map: "idx_employee_roles_employee_id")
+  @@index([roleId], map: "idx_employee_roles_role_id")
+  @@index([assignedByEmployeeId], map: "idx_employee_roles_assigned_by")
+  @@index([deletedAt], map: "idx_employee_roles_deleted_at")
+  @@map("employee_roles")
+}
+
+// ---------------------------------------------------------------------------
+// RolePermission (junction: Role ↔ Permission)
+// ---------------------------------------------------------------------------
+
+/// Maps permissions to roles.
+model RolePermission {
+  id           String    @id @default(uuid()) @db.Uuid
+  roleId       String    @map("role_id") @db.Uuid
+  permissionId String    @map("permission_id") @db.Uuid
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([roleId, permissionId], map: "idx_role_permissions_unique")
+  @@index([roleId], map: "idx_role_permissions_role_id")
+  @@index([permissionId], map: "idx_role_permissions_permission_id")
+  @@index([deletedAt], map: "idx_role_permissions_deleted_at")
+  @@map("role_permissions")
+}
+
+// ---------------------------------------------------------------------------
+// EmployeeSession
+// ---------------------------------------------------------------------------
+
+/// Active login sessions and refresh tokens.
+/// Equivalent to `user_sessions` in ERD, scoped to Employee.
+model EmployeeSession {
+  id               String    @id @default(uuid()) @db.Uuid
+  employeeId       String    @map("employee_id") @db.Uuid
+  refreshTokenHash String    @unique @map("refresh_token_hash") @db.VarChar(255)
+  deviceInfo       String?   @map("device_info") @db.VarChar(255)
+  ipAddress        String?   @map("ip_address") @db.VarChar(45)
+  expiresAt        DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt        DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([employeeId], map: "idx_employee_sessions_employee_id")
+  @@index([expiresAt], map: "idx_employee_sessions_expires_at")
+  @@index([deletedAt], map: "idx_employee_sessions_deleted_at")
+  @@map("employee_sessions")
+}
+
+// ---------------------------------------------------------------------------
+// OtpCode
+// ---------------------------------------------------------------------------
+
+/// OTP verification records for passwordless login via WhatsApp.
+model OtpCode {
+  id          String     @id @default(uuid()) @db.Uuid
+  employeeId  String?    @map("employee_id") @db.Uuid
+  phone       String     @db.VarChar(20)
+  codeHash    String     @map("code_hash") @db.VarChar(255)
+  purpose     OtpPurpose
+  status      OtpStatus  @default(pending)
+  attempts    Int        @default(0)
+  maxAttempts Int        @default(5) @map("max_attempts")
+  expiresAt   DateTime   @map("expires_at") @db.Timestamptz(6)
+  verifiedAt  DateTime?  @map("verified_at") @db.Timestamptz(6)
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime?  @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  employee Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([phone], map: "idx_otp_codes_phone")
+  @@index([status], map: "idx_otp_codes_status")
+  @@index([expiresAt], map: "idx_otp_codes_expires_at")
+  @@index([employeeId], map: "idx_otp_codes_employee_id")
+  @@index([deletedAt], map: "idx_otp_codes_deleted_at")
+  @@map("otp_codes")
+}
+
+// ===========================================================================
+// Customer Module
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Enums — Customer
+// ---------------------------------------------------------------------------
+
+enum Gender {
+  male
+  female
+  other
+
+  @@map("gender")
+}
+
+enum WalletTransactionType {
+  top_up
+  deduction
+  refund
+  adjustment
+  promotion
+  manual_credit
+  manual_debit
+
+  @@map("wallet_transaction_type")
+}
+
+enum RewardPointType {
+  earn
+  redeem
+  expired
+
+  @@map("reward_point_type")
+}
+
+enum RewardPointSource {
+  laundry_payment
+  promotion
+  birthday
+  referral
+  manual_bonus
+  redeem
+  voucher
+  wallet_credit
+
+  @@map("reward_point_source")
+}
+
+enum LoyaltyVoucherDiscountType {
+  PERCENTAGE
+  FIXED
+
+  @@map("loyalty_voucher_discount_type")
+}
+
+enum LoyaltyVoucherStatus {
+  ACTIVE
+  INACTIVE
+  EXPIRED
+
+  @@map("loyalty_voucher_status")
+}
+
+enum CashbackType {
+  PERCENTAGE
+  FIXED
+
+  @@map("cashback_type")
+}
+
+enum DevicePlatform {
+  android
+  ios
+
+  @@map("device_platform")
+}
+
+/// Shared urgency/priority level used across ironing, notifications, and tickets.
+enum PriorityLevel {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+
+  @@map("priority_level")
+}
+
+// ---------------------------------------------------------------------------
+// Customer
+// ---------------------------------------------------------------------------
+
+/// Core customer profile for laundry service.
+model Customer {
+  id               String    @id @default(uuid()) @db.Uuid
+  customerCode     String    @unique @map("customer_code") @db.VarChar(20)
+  fullName         String    @map("full_name") @db.VarChar(150)
+  phone            String    @unique @db.VarChar(20)
+  email            String?   @db.VarChar(150)
+  gender           Gender?
+  birthDate        DateTime? @map("birth_date") @db.Date
+  defaultAddressId String?   @unique @map("default_address_id") @db.Uuid
+  photoUrl         String?   @map("photo_url") @db.VarChar(500)
+  isActive         Boolean   @default(true) @map("is_active")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  defaultAddress          CustomerAddress?         @relation("CustomerDefaultAddress", fields: [defaultAddressId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  addresses               CustomerAddress[]        @relation("CustomerAddresses")
+  wallet                  CustomerWallet?
+  walletTransactions      WalletTransaction[]
+  rewardPoints            RewardPoint[]
+  notes                   CustomerNote[]
+  devices                 CustomerDevice[]
+  orders                  Order[]
+  customerServiceTickets  CustomerServiceTicket[]
+  customerServiceMessages CustomerServiceMessage[]
+
+  @@index([fullName], map: "idx_customers_full_name")
+  @@index([isActive], map: "idx_customers_is_active")
+  @@index([deletedAt], map: "idx_customers_deleted_at")
+  @@map("customers")
+}
+
+// ---------------------------------------------------------------------------
+// CustomerAddress
+// ---------------------------------------------------------------------------
+
+/// Multiple delivery/pickup addresses per customer.
+model CustomerAddress {
+  id            String    @id @default(uuid()) @db.Uuid
+  customerId    String    @map("customer_id") @db.Uuid
+  recipientName String    @map("recipient_name") @db.VarChar(150)
+  phone         String    @db.VarChar(20)
+  province      String    @db.VarChar(100)
+  city          String    @db.VarChar(100)
+  district      String    @db.VarChar(100)
+  postalCode    String?   @map("postal_code") @db.VarChar(10)
+  addressDetail String    @map("address_detail") @db.Text
+  latitude      Decimal?  @db.Decimal(10, 7)
+  longitude     Decimal?  @db.Decimal(10, 7)
+  isDefault     Boolean   @default(false) @map("is_default")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  customer           Customer      @relation("CustomerAddresses", fields: [customerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  defaultForCustomer Customer?     @relation("CustomerDefaultAddress")
+  pickupOrders       Order[]       @relation("OrderPickupAddress")
+  deliveryOrders     Order[]       @relation("OrderDeliveryAddress")
+  pickupJobs         PickupJob[]   @relation("PickupJobAddress")
+  deliveryJobs       DeliveryJob[] @relation("DeliveryJobAddress")
+
+  @@index([customerId], map: "idx_customer_addresses_customer_id")
+  @@index([isDefault], map: "idx_customer_addresses_is_default")
+  @@index([deletedAt], map: "idx_customer_addresses_deleted_at")
+  @@map("customer_addresses")
+}
+
+// ---------------------------------------------------------------------------
+// CustomerWallet
+// ---------------------------------------------------------------------------
+
+/// One prepaid wallet per customer.
+model CustomerWallet {
+  id               String    @id @default(uuid()) @db.Uuid
+  customerId       String    @unique @map("customer_id") @db.Uuid
+  currentBalance   Decimal   @default(0) @map("current_balance") @db.Decimal(15, 2)
+  currency         String    @default("IDR") @db.VarChar(3)
+  balanceUpdatedAt DateTime  @default(now()) @map("balance_updated_at") @db.Timestamptz(6)
+  isActive         Boolean   @default(true) @map("is_active")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  customer     Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  transactions WalletTransaction[]
+
+  @@index([deletedAt], map: "idx_customer_wallets_deleted_at")
+  @@map("customer_wallets")
+}
+
+// ---------------------------------------------------------------------------
+// WalletTransaction
+// ---------------------------------------------------------------------------
+
+/// Wallet credit and debit transaction history.
+model WalletTransaction {
+  id                    String                @id @default(uuid()) @db.Uuid
+  customerId            String                @map("customer_id") @db.Uuid
+  walletId              String                @map("wallet_id") @db.Uuid
+  referenceNumber       String?               @unique @map("reference_number") @db.VarChar(50)
+  amount                Decimal               @db.Decimal(15, 2)
+  balanceAfter          Decimal?              @map("balance_after") @db.Decimal(15, 2)
+  type                  WalletTransactionType
+  description           String?               @db.Text
+  referenceType         String?               @map("reference_type") @db.VarChar(50)
+  referenceId           String?               @map("reference_id") @db.Uuid
+  reversedTransactionId String?               @unique @map("reversed_transaction_id") @db.Uuid
+  createdByEmployeeId   String?               @map("created_by_employee_id") @db.Uuid
+  createdAt             DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt             DateTime?             @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  customer              Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  wallet                CustomerWallet    @relation(fields: [walletId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  createdByEmployee     Employee?         @relation(fields: [createdByEmployeeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  reversedTransaction   WalletTransaction? @relation("WalletTransactionReversal", fields: [reversedTransactionId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  reversalOf            WalletTransaction? @relation("WalletTransactionReversal")
+
+  @@index([customerId], map: "idx_wallet_transactions_customer_id")
+  @@index([walletId], map: "idx_wallet_transactions_wallet_id")
+  @@index([type], map: "idx_wallet_transactions_type")
+  @@index([createdAt], map: "idx_wallet_transactions_created_at")
+  @@index([createdByEmployeeId], map: "idx_wallet_transactions_created_by")
+  @@index([referenceId], map: "idx_wallet_transactions_reference_id")
+  @@index([deletedAt], map: "idx_wallet_transactions_deleted_at")
+  @@map("wallet_transactions")
+}
+
+// ---------------------------------------------------------------------------
+// RewardPoint
+// ---------------------------------------------------------------------------
+
+/// Customer loyalty reward point ledger.
+model RewardPoint {
+  id                  String             @id @default(uuid()) @db.Uuid
+  customerId          String             @map("customer_id") @db.Uuid
+  point               Int
+  type                RewardPointType
+  source              RewardPointSource?
+  description         String?            @db.Text
+  referenceType       String?            @map("reference_type") @db.VarChar(50)
+  referenceId         String?            @map("reference_id") @db.Uuid
+  balanceAfter        Int?               @map("balance_after")
+  expiredAt           DateTime?          @map("expired_at") @db.Timestamptz(6)
+  createdByEmployeeId String?            @map("created_by_employee_id") @db.Uuid
+  createdAt           DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt           DateTime?          @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  customer          Customer @relation(fields: [customerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  createdByEmployee Employee? @relation(fields: [createdByEmployeeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([customerId], map: "idx_reward_points_customer_id")
+  @@index([type], map: "idx_reward_points_type")
+  @@index([source], map: "idx_reward_points_source")
+  @@index([referenceId], map: "idx_reward_points_reference_id")
+  @@index([expiredAt], map: "idx_reward_points_expired_at")
+  @@index([deletedAt], map: "idx_reward_points_deleted_at")
+  @@map("reward_points")
+}
+
+// ---------------------------------------------------------------------------
+// LoyaltyVoucher
+// ---------------------------------------------------------------------------
+
+/// Customer loyalty voucher for discounts and promotions.
+model LoyaltyVoucher {
+  id                  String                   @id @default(uuid()) @db.Uuid
+  code                String                   @unique @db.VarChar(50)
+  name                String                   @db.VarChar(150)
+  discountType        LoyaltyVoucherDiscountType @map("discount_type")
+  discountValue       Decimal                  @map("discount_value") @db.Decimal(15, 2)
+  cashbackType        CashbackType?            @map("cashback_type")
+  cashbackValue       Decimal?                 @map("cashback_value") @db.Decimal(15, 2)
+  cashbackMax         Decimal?                 @map("cashback_max") @db.Decimal(15, 2)
+  cashbackExpirationDays Int?                  @map("cashback_expiration_days")
+  startDate           DateTime                 @map("start_date") @db.Timestamptz(6)
+  endDate             DateTime                 @map("end_date") @db.Timestamptz(6)
+  usageLimit          Int                      @default(0) @map("usage_limit")
+  usageCount          Int                      @default(0) @map("usage_count")
+  minimumTransaction  Decimal                  @default(0) @map("minimum_transaction") @db.Decimal(15, 2)
+  status              LoyaltyVoucherStatus     @default(ACTIVE)
+  createdAt           DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt           DateTime?                @map("deleted_at") @db.Timestamptz(6)
+
+  @@index([status], map: "idx_loyalty_vouchers_status")
+  @@index([startDate, endDate], map: "idx_loyalty_vouchers_period")
+  @@index([deletedAt], map: "idx_loyalty_vouchers_deleted_at")
+  @@map("loyalty_vouchers")
+}
+
+// ---------------------------------------------------------------------------
+// CustomerNote
+// ---------------------------------------------------------------------------
+
+/// Internal staff notes attached to a customer.
+model CustomerNote {
+  id         String    @id @default(uuid()) @db.Uuid
+  customerId String    @map("customer_id") @db.Uuid
+  employeeId String    @map("employee_id") @db.Uuid
+  note       String    @db.Text
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt  DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([customerId], map: "idx_customer_notes_customer_id")
+  @@index([employeeId], map: "idx_customer_notes_employee_id")
+  @@index([createdAt], map: "idx_customer_notes_created_at")
+  @@index([deletedAt], map: "idx_customer_notes_deleted_at")
+  @@map("customer_notes")
+}
+
+// ---------------------------------------------------------------------------
+// CustomerDevice
+// ---------------------------------------------------------------------------
+
+/// Push notification device registration for future Customer Mobile App.
+model CustomerDevice {
+  id          String         @id @default(uuid()) @db.Uuid
+  customerId  String         @map("customer_id") @db.Uuid
+  deviceToken String         @map("device_token") @db.VarChar(500)
+  platform    DevicePlatform
+  lastLoginAt DateTime?      @map("last_login_at") @db.Timestamptz(6)
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime?      @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([customerId, deviceToken], map: "idx_customer_devices_customer_token")
+  @@index([platform], map: "idx_customer_devices_platform")
+  @@index([deletedAt], map: "idx_customer_devices_deleted_at")
+  @@map("customer_devices")
+}
+
+// ===========================================================================
+// Laundry Services Module
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Enums — Laundry Services
+// ---------------------------------------------------------------------------
+
+/// Pricing unit type for laundry services.
+enum ServiceUnitType {
+  kg
+  piece
+  item
+
+  @@map("service_unit_type")
+}
+
+// ---------------------------------------------------------------------------
+// ServiceCategory
+// ---------------------------------------------------------------------------
+
+/// Groups laundry services into categories.
+model ServiceCategory {
+  id           String    @id @default(uuid()) @db.Uuid
+  code         String    @unique @db.VarChar(50)
+  name         String    @db.VarChar(100)
+  description  String?   @db.Text
+  displayOrder Int       @default(0) @map("display_order")
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  services Service[]
+
+  @@index([displayOrder], map: "idx_service_categories_display_order")
+  @@index([isActive], map: "idx_service_categories_is_active")
+  @@index([deletedAt], map: "idx_service_categories_deleted_at")
+  @@map("service_categories")
+}
+
+// ---------------------------------------------------------------------------
+// Service
+// ---------------------------------------------------------------------------
+
+/// Laundry service catalog item.
+model Service {
+  id          String          @id @default(uuid()) @db.Uuid
+  categoryId  String          @map("category_id") @db.Uuid
+  serviceCode String          @unique @map("service_code") @db.VarChar(50)
+  serviceName String          @map("service_name") @db.VarChar(150)
+  description String?         @db.Text
+  unitType    ServiceUnitType @default(kg) @map("unit_type")
+  weight      Boolean         @default(true)
+  piece       Boolean         @default(false)
+  durationDay Int?            @map("duration_day")
+  isActive    Boolean         @default(true) @map("is_active")
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime?       @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  category   ServiceCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  prices     ServicePrice[]
+  orderItems OrderItem[]
+
+  @@index([categoryId], map: "idx_services_category_id")
+  @@index([isActive], map: "idx_services_is_active")
+  @@index([unitType], map: "idx_services_unit_type")
+  @@index([deletedAt], map: "idx_services_deleted_at")
+  @@map("services")
+}
+
+// ---------------------------------------------------------------------------
+// ServicePrice
+// ---------------------------------------------------------------------------
+
+/// Price history per service with effective date ranges.
+model ServicePrice {
+  id            String    @id @default(uuid()) @db.Uuid
+  serviceId     String    @map("service_id") @db.Uuid
+  price         Decimal   @db.Decimal(15, 2)
+  effectiveDate DateTime  @map("effective_date") @db.Date
+  expiredDate   DateTime? @map("expired_date") @db.Date
+  isActive      Boolean   @default(true) @map("is_active")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  service    Service     @relation(fields: [serviceId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  orderItems OrderItem[]
+
+  @@unique([serviceId, effectiveDate], map: "idx_service_prices_service_effective")
+  @@index([serviceId], map: "idx_service_prices_service_id")
+  @@index([effectiveDate], map: "idx_service_prices_effective_date")
+  @@index([expiredDate], map: "idx_service_prices_expired_date")
+  @@index([isActive], map: "idx_service_prices_is_active")
+  @@index([deletedAt], map: "idx_service_prices_deleted_at")
+  @@map("service_prices")
+}
+
+// ===========================================================================
+// Orders Module
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Enums — Orders
+// ---------------------------------------------------------------------------
+
+/// Order-level payment settlement status.
+enum OrderPaymentStatus {
+  UNPAID
+  PAID
+  CANCELLED
+  REFUNDED
+
+  @@map("order_payment_status")
+}
+
+/// Order fulfillment lifecycle status.
+enum OrderStatus {
+  CREATED
+  WAITING_PAYMENT
+  PAYMENT_CONFIRMED
+  WAITING_BINATU
+  IRONING_ACCEPTED
+  CURRENTLY_IRONING
+  FINISHED_IRONING
+  READY_FOR_PICKUP
+  WAITING_PICKUP_DRIVER
+  PICKUP_COMPLETED
+  WAITING_DELIVERY
+  OUT_FOR_DELIVERY
+  DELIVERED
+  COMPLETED
+  CANCELLED
+
+  @@map("order_status")
+}
+
+/// Category of photo attached to an order.
+enum PhotoType {
+  CUSTOMER_ITEM
+  BEFORE_WASH
+  AFTER_WASH
+  AFTER_IRONING
+  DELIVERY_PROOF
+  RECEIPT
+  OTHER
+
+  @@map("photo_type")
+}
+
+/// Category of activity entry in the order timeline.
+enum TimelineType {
+  ORDER
+  PAYMENT
+  IRONING
+  PICKUP
+  DELIVERY
+  NOTIFICATION
+  CUSTOMER_SERVICE
+  SYSTEM
+
+  @@map("timeline_type")
+}
+
+/// Payment method snapshot on order header (denormalized).
+enum OrderPaymentMethod {
+  CASH
+  QRIS
+  BANK_TRANSFER
+  YELO_WALLET
+
+  @@map("order_payment_method")
+}
+
+// ---------------------------------------------------------------------------
+// Order
+// ---------------------------------------------------------------------------
+
+/// Laundry order header — one transaction per customer visit.
+model Order {
+  id                  String              @id @default(uuid()) @db.Uuid
+  queueNumber         String              @map("queue_number") @db.VarChar(20)
+  invoiceNumber       String              @unique @map("invoice_number") @db.VarChar(30)
+  customerId          String              @map("customer_id") @db.Uuid
+  orderDate           DateTime            @default(now()) @map("order_date") @db.Timestamptz(6)
+  receivedDate        DateTime?           @map("received_date") @db.Timestamptz(6)
+  estimatedFinishDate DateTime?           @map("estimated_finish_date") @db.Timestamptz(6)
+  completedDate       DateTime?           @map("completed_date") @db.Timestamptz(6)
+  pickupRequired      Boolean             @default(false) @map("pickup_required")
+  deliveryRequired    Boolean             @default(false) @map("delivery_required")
+  pickupAddressId     String?             @map("pickup_address_id") @db.Uuid
+  deliveryAddressId   String?             @map("delivery_address_id") @db.Uuid
+  paymentStatus       OrderPaymentStatus  @default(UNPAID) @map("payment_status")
+  orderStatus         OrderStatus         @default(CREATED) @map("order_status")
+  paymentMethod       OrderPaymentMethod? @map("payment_method")
+  notes               String?             @db.Text
+  createdByEmployeeId String              @map("created_by_employee_id") @db.Uuid
+  updatedByEmployeeId String?             @map("updated_by_employee_id") @db.Uuid
+  createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt           DateTime?           @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  customer          Customer             @relation(fields: [customerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  pickupAddress     CustomerAddress?     @relation("OrderPickupAddress", fields: [pickupAddressId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  deliveryAddress   CustomerAddress?     @relation("OrderDeliveryAddress", fields: [deliveryAddressId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  createdByEmployee Employee             @relation("OrderCreatedBy", fields: [createdByEmployeeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  updatedByEmployee Employee?            @relation("OrderUpdatedBy", fields: [updatedByEmployeeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  items             OrderItem[]
+  statusHistories   OrderStatusHistory[]
+  photos            OrderPhoto[]
+  timelines         OrderTimeline[]
+  payments          Payment[]
+  ironingJobs       IroningJob[]
+  pickupJob         PickupJob?
+  deliveryJob       DeliveryJob?
+  driverActivities  DriverActivity[]
+
+  @@index([customerId], map: "idx_orders_customer_id")
+  @@index([queueNumber], map: "idx_orders_queue_number")
+  @@index([orderStatus], map: "idx_orders_order_status")
+  @@index([paymentStatus], map: "idx_orders_payment_status")
+  @@index([orderStatus, deletedAt], map: "idx_orders_status_active")
+  @@index([paymentStatus, deletedAt], map: "idx_orders_payment_active")
+  @@index([receivedDate], map: "idx_orders_received_date")
+  @@index([estimatedFinishDate], map: "idx_orders_estimated_finish_date")
+  @@index([orderDate], map: "idx_orders_order_date")
+  @@index([createdByEmployeeId], map: "idx_orders_created_by_employee_id")
+  @@index([updatedByEmployeeId], map: "idx_orders_updated_by_employee_id")
+  @@index([deletedAt], map: "idx_orders_deleted_at")
+  @@map("orders")
+}
+
+// ---------------------------------------------------------------------------
+// OrderItem
+// ---------------------------------------------------------------------------
+
+/// Line item within an order — stores price snapshot at transaction time.
+model OrderItem {
+  id             String    @id @default(uuid()) @db.Uuid
+  orderId        String    @map("order_id") @db.Uuid
+  serviceId      String    @map("service_id") @db.Uuid
+  servicePriceId String    @map("service_price_id") @db.Uuid
+  quantity       Decimal   @db.Decimal(10, 3)
+  weight         Decimal?  @db.Decimal(10, 3)
+  unitPrice      Decimal   @map("unit_price") @db.Decimal(15, 2)
+  subtotal       Decimal   @db.Decimal(15, 2)
+  notes          String?   @db.Text
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  order        Order        @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  service      Service      @relation(fields: [serviceId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  servicePrice ServicePrice @relation(fields: [servicePriceId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([orderId], map: "idx_order_items_order_id")
+  @@index([serviceId], map: "idx_order_items_service_id")
+  @@index([servicePriceId], map: "idx_order_items_service_price_id")
+  @@index([deletedAt], map: "idx_order_items_deleted_at")
+  @@map("order_items")
+}
+
+// ---------------------------------------------------------------------------
+// OrderStatusHistory
+// ---------------------------------------------------------------------------
+
+/// Audit trail of every order status transition.
+model OrderStatusHistory {
+  id                  String       @id @default(uuid()) @db.Uuid
+  orderId             String       @map("order_id") @db.Uuid
+  previousStatus      OrderStatus? @map("previous_status")
+  currentStatus       OrderStatus  @map("current_status")
+  changedByEmployeeId String?      @map("changed_by_employee_id") @db.Uuid
+  notes               String?      @db.Text
+  createdAt           DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  order             Order     @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  changedByEmployee Employee? @relation(fields: [changedByEmployeeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([orderId], map: "idx_order_status_histories_order_id")
+  @@index([currentStatus], map: "idx_order_status_histories_current_status")
+  @@index([changedByEmployeeId], map: "idx_order_status_histories_changed_by")
+  @@index([createdAt], map: "idx_order_status_histories_created_at")
+  @@map("order_status_histories")
+}
+
+// ---------------------------------------------------------------------------
+// OrderPhoto
+// ---------------------------------------------------------------------------
+
+/// Photos attached to an order (items, process proof, delivery proof, etc.).
+model OrderPhoto {
+  id                   String    @id @default(uuid()) @db.Uuid
+  orderId              String    @map("order_id") @db.Uuid
+  photoType            PhotoType @map("photo_type")
+  photoUrl             String    @map("photo_url") @db.VarChar(500)
+  uploadedByEmployeeId String    @map("uploaded_by_employee_id") @db.Uuid
+  description          String?   @db.Text
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  order              Order    @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  uploadedByEmployee Employee @relation(fields: [uploadedByEmployeeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([orderId], map: "idx_order_photos_order_id")
+  @@index([photoType], map: "idx_order_photos_photo_type")
+  @@index([uploadedByEmployeeId], map: "idx_order_photos_uploaded_by")
+  @@index([createdAt], map: "idx_order_photos_created_at")
+  @@map("order_photos")
+}
+
+// ---------------------------------------------------------------------------
+// OrderTimeline
+// ---------------------------------------------------------------------------
+
+/// Single source of truth for all order activity shown across dashboards and apps.
+model OrderTimeline {
+  id           String       @id @default(uuid()) @db.Uuid
+  orderId      String       @map("order_id") @db.Uuid
+  timelineType TimelineType @map("timeline_type")
+  title        String       @db.VarChar(200)
+  description  String?      @db.Text
+  employeeId   String?      @map("employee_id") @db.Uuid
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  order    Order     @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  employee Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([orderId], map: "idx_order_timelines_order_id")
+  @@index([timelineType], map: "idx_order_timelines_timeline_type")
+  @@index([employeeId], map: "idx_order_timelines_employee_id")
+  @@index([createdAt], map: "idx_order_timelines_created_at")
+  @@map("order_timelines")
+}
+
+// ===========================================================================
+// Finance Module
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Enums — Finance
+// ---------------------------------------------------------------------------
+
+/// Individual payment transaction status.
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+  CANCELLED
+
+  @@map("payment_transaction_status")
+}
+
+/// Cashflow ledger entry direction.
+enum CashflowType {
+  INCOME
+  EXPENSE
+
+  @@map("cashflow_type")
+}
+
+/// Polymorphic source type for cashflow ledger entries.
+enum ReferenceType {
+  ORDER_PAYMENT
+  WALLET_TOPUP
+  REFUND
+  EXPENSE
+  PAYROLL
+  SYSTEM
+
+  @@map("reference_type")
+}
+
+// ---------------------------------------------------------------------------
+// PaymentMethod
+// ---------------------------------------------------------------------------
+
+/// Master data for payment methods (CASH, QRIS, BANK_TRANSFER, YELO_WALLET).
+model PaymentMethod {
+  id        String    @id @default(uuid()) @db.Uuid
+  code      String    @unique @db.VarChar(30)
+  name      String    @db.VarChar(100)
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  payments Payment[]
+
+  @@index([isActive], map: "idx_payment_methods_is_active")
+  @@index([deletedAt], map: "idx_payment_methods_deleted_at")
+  @@map("payment_methods")
+}
+
+// ---------------------------------------------------------------------------
+// Payment
+// ---------------------------------------------------------------------------
+
+/// Payment transaction linked to an order.
+model Payment {
+  id                   String        @id @default(uuid()) @db.Uuid
+  orderId              String        @map("order_id") @db.Uuid
+  paymentMethodId      String        @map("payment_method_id") @db.Uuid
+  amount               Decimal       @db.Decimal(15, 2)
+  paidAt               DateTime      @default(now()) @map("paid_at") @db.Timestamptz(6)
+  referenceNumber      String?       @unique @map("reference_number") @db.VarChar(50)
+  paymentStatus        PaymentStatus @default(PENDING) @map("payment_status")
+  receivedByEmployeeId String        @map("received_by_employee_id") @db.Uuid
+  notes                String?       @db.Text
+  createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt            DateTime?     @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  order              Order         @relation(fields: [orderId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  paymentMethod      PaymentMethod @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  receivedByEmployee Employee      @relation("PaymentReceivedBy", fields: [receivedByEmployeeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([orderId], map: "idx_payments_order_id")
+  @@index([paymentMethodId], map: "idx_payments_payment_method_id")
+  @@index([paymentStatus], map: "idx_payments_payment_status")
+  @@index([paidAt], map: "idx_payments_paid_at")
+  @@index([receivedByEmployeeId], map: "idx_payments_received_by_employee_id")
+  @@index([deletedAt], map: "idx_payments_deleted_at")
+  @@map("payments")
+}
+
+// ---------------------------------------------------------------------------
+// ExpenseCategory
+// ---------------------------------------------------------------------------
+
+/// Master data for operational expense categories.
+model ExpenseCategory {
+  id          String    @id @default(uuid()) @db.Uuid
+  code        String    @unique @db.VarChar(50)
+  name        String    @db.VarChar(100)
+  description String?   @db.Text
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  expenses Expense[]
+
+  @@index([isActive], map: "idx_expense_categories_is_active")
+  @@index([deletedAt], map: "idx_expense_categories_deleted_at")
+  @@map("expense_categories")
+}
+
+// ---------------------------------------------------------------------------
+// Expense
+// ---------------------------------------------------------------------------
+
+/// Operational business expense record.
+model Expense {
+  id                String    @id @default(uuid()) @db.Uuid
+  expenseCategoryId String    @map("expense_category_id") @db.Uuid
+  employeeId        String    @map("employee_id") @db.Uuid
+  title             String    @db.VarChar(200)
+  description       String?   @db.Text
+  amount            Decimal   @db.Decimal(15, 2)
+  expenseDate       DateTime  @map("expense_date") @db.Date
+  receiptPhotoUrl   String?   @map("receipt_photo_url") @db.VarChar(500)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  expenseCategory ExpenseCategory @relation(fields: [expenseCategoryId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  employee        Employee        @relation(fields: [employeeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([expenseCategoryId], map: "idx_expenses_expense_category_id")
+  @@index([employeeId], map: "idx_expenses_employee_id")
+  @@index([expenseDate], map: "idx_expenses_expense_date")
+  @@index([deletedAt], map: "idx_expenses_deleted_at")
+  @@map("expenses")
+}
+
+// ---------------------------------------------------------------------------
+// Cashflow
+// ---------------------------------------------------------------------------
+
+/// Financial ledger — single source of truth for all money movements.
+model Cashflow {
+  id                  String        @id @default(uuid()) @db.Uuid
+  type                CashflowType  @map("type")
+  referenceType       ReferenceType @map("reference_type")
+  referenceId         String        @map("reference_id") @db.Uuid
+  amount              Decimal       @db.Decimal(15, 2)
+  transactionDate     DateTime      @map("transaction_date") @db.Timestamptz(6)
+  description         String?       @db.Text
+  createdByEmployeeId String        @map("created_by_employee_id") @db.Uuid
+  createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  createdByEmployee Employee @relation(fields: [createdByEmployeeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([type], map: "idx_cashflows_type")
+  @@index([referenceType, referenceId], map: "idx_cashflows_reference")
+  @@index([transactionDate], map: "idx_cashflows_transaction_date")
+  @@index([createdByEmployeeId], map: "idx_cashflows_created_by_employee_id")
+  @@map("cashflows")
+}
+
+// ===========================================================================
+// Operations Module
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Enums — Operations
+// ---------------------------------------------------------------------------
+
+/// Daily attendance outcome for an employee.
+enum AttendanceStatus {
+  PRESENT
+  LATE
+  ABSENT
+  LEAVE
+  SICK
+
+  @@map("attendance_status")
+}
+
+/// Clock activity type recorded in attendance logs.
+enum AttendanceActivityType {
+  CHECK_IN
+  CHECK_OUT
+
+  @@map("attendance_activity_type")
+}
+
+/// Ironing job lifecycle status for Binatu monitoring.
+enum IroningStatus {
+  WAITING
+  ACCEPTED
+  IN_PROGRESS
+  FINISHED
+  CANCELLED
+
+  @@map("ironing_status")
+}
+
+// ---------------------------------------------------------------------------
+// Attendance
+// ---------------------------------------------------------------------------
+
+/// Daily employee attendance record — one per employee per day.
+model Attendance {
+  id             String           @id @default(uuid()) @db.Uuid
+  employeeId     String           @map("employee_id") @db.Uuid
+  attendanceDate DateTime         @map("attendance_date") @db.Date
+  checkIn        DateTime?        @map("check_in") @db.Timestamptz(6)
+  checkOut       DateTime?        @map("check_out") @db.Timestamptz(6)
+  workingMinutes Int?             @map("working_minutes")
+  lateMinutes    Int              @default(0) @map("late_minutes")
+  status         AttendanceStatus @default(PRESENT)
+  notes          String?          @db.Text
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime?        @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  employee Employee        @relation(fields: [employeeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  logs     AttendanceLog[]
+
+  @@unique([employeeId, attendanceDate], map: "idx_attendances_employee_date")
+  @@index([employeeId], map: "idx_attendances_employee_id")
+  @@index([attendanceDate], map: "idx_attendances_attendance_date")
+  @@index([status], map: "idx_attendances_status")
+  @@index([deletedAt], map: "idx_attendances_deleted_at")
+  @@map("attendances")
+}
+
+// ---------------------------------------------------------------------------
+// AttendanceLog
+// ---------------------------------------------------------------------------
+
+/// Audit trail of every check-in/check-out activity.
+model AttendanceLog {
+  id           String                 @id @default(uuid()) @db.Uuid
+  attendanceId String                 @map("attendance_id") @db.Uuid
+  employeeId   String                 @map("employee_id") @db.Uuid
+  activityType AttendanceActivityType @map("activity_type")
+  activityTime DateTime               @map("activity_time") @db.Timestamptz(6)
+  latitude     Decimal?               @db.Decimal(10, 7)
+  longitude    Decimal?               @db.Decimal(10, 7)
+  deviceInfo   String?                @map("device_info") @db.VarChar(255)
+  createdAt    DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  attendance Attendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  employee   Employee   @relation(fields: [employeeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([attendanceId], map: "idx_attendance_logs_attendance_id")
+  @@index([employeeId], map: "idx_attendance_logs_employee_id")
+  @@index([activityType], map: "idx_attendance_logs_activity_type")
+  @@index([activityTime], map: "idx_attendance_logs_activity_time")
+  @@map("attendance_logs")
+}
+
+// ---------------------------------------------------------------------------
+// AttendanceSetting
+// ---------------------------------------------------------------------------
+
+/// Attendance configuration (work hours, late tolerance, overtime rules).
+model AttendanceSetting {
+  id                   String   @id @default(uuid()) @db.Uuid
+  workStartTime        DateTime @map("work_start_time") @db.Time(0)
+  workEndTime          DateTime @map("work_end_time") @db.Time(0)
+  lateToleranceMinutes Int      @default(0) @map("late_tolerance_minutes")
+  overtimeEnabled      Boolean  @default(false) @map("overtime_enabled")
+  isActive             Boolean  @default(true) @map("is_active")
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([isActive], map: "idx_attendance_settings_is_active")
+  @@map("attendance_settings")
+}
+
+// ---------------------------------------------------------------------------
+// IroningJob
+// ---------------------------------------------------------------------------
+
+/// Ironing assignment for Binatu — linked to an order for KPI tracking.
+model IroningJob {
+  id               String        @id @default(uuid()) @db.Uuid
+  orderId          String        @map("order_id") @db.Uuid
+  employeeId       String?       @map("employee_id") @db.Uuid
+  acceptedAt       DateTime?     @map("accepted_at") @db.Timestamptz(6)
+  startedAt        DateTime?     @map("started_at") @db.Timestamptz(6)
+  finishedAt       DateTime?     @map("finished_at") @db.Timestamptz(6)
+  status           IroningStatus @default(WAITING)
+  priority         PriorityLevel @default(NORMAL)
+  estimatedMinutes Int?          @map("estimated_minutes")
+  actualMinutes    Int?          @map("actual_minutes")
+  notes            String?       @db.Text
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt        DateTime?     @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  order         Order                 @relation(fields: [orderId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  employee      Employee?             @relation(fields: [employeeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  contributions IroningContribution[]
+
+  @@index([orderId], map: "idx_ironing_jobs_order_id")
+  @@index([employeeId], map: "idx_ironing_jobs_employee_id")
+  @@index([status], map: "idx_ironing_jobs_status")
+  @@index([priority], map: "idx_ironing_jobs_priority")
+  @@index([acceptedAt], map: "idx_ironing_jobs_accepted_at")
+  @@index([finishedAt], map: "idx_ironing_jobs_finished_at")
+  @@index([deletedAt], map: "idx_ironing_jobs_deleted_at")
+  @@map("ironing_jobs")
+}
+
+// ---------------------------------------------------------------------------
+// IroningContribution
+// ---------------------------------------------------------------------------
+
+/// Operator contribution when helping a Binatu employee with ironing.
+model IroningContribution {
+  id                  String    @id @default(uuid()) @db.Uuid
+  ironingJobId        String    @map("ironing_job_id") @db.Uuid
+  employeeId          String    @map("employee_id") @db.Uuid
+  helpStartedAt       DateTime  @map("help_started_at") @db.Timestamptz(6)
+  helpFinishedAt      DateTime? @map("help_finished_at") @db.Timestamptz(6)
+  contributionMinutes Int?      @map("contribution_minutes")
+  notes               String?   @db.Text
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  ironingJob IroningJob @relation(fields: [ironingJobId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  employee   Employee   @relation(fields: [employeeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([ironingJobId], map: "idx_ironing_contributions_ironing_job_id")
+  @@index([employeeId], map: "idx_ironing_contributions_employee_id")
+  @@index([helpStartedAt], map: "idx_ironing_contributions_help_started_at")
+  @@map("ironing_contributions")
+}
+
+// ===========================================================================
+// Pickup & Delivery Module
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Enums — Pickup & Delivery
+// ---------------------------------------------------------------------------
+
+/// Pickup job lifecycle status.
+enum PickupStatus {
+  WAITING_ASSIGNMENT
+  ASSIGNED
+  ACCEPTED
+  ON_THE_WAY
+  ARRIVED
+  COMPLETED
+  CANCELLED
+
+  @@map("pickup_status")
+}
+
+/// Delivery job lifecycle status.
+enum DeliveryStatus {
+  WAITING_ASSIGNMENT
+  ASSIGNED
+  ACCEPTED
+  OUT_FOR_DELIVERY
+  ARRIVED
+  COMPLETED
+  FAILED
+  CANCELLED
+
+  @@map("delivery_status")
+}
+
+/// Driver operational activity type for GPS and audit tracking.
+enum DriverActivityType {
+  ASSIGNMENT_RECEIVED
+  PICKUP_STARTED
+  PICKUP_COMPLETED
+  DELIVERY_STARTED
+  DELIVERY_COMPLETED
+  LOCATION_UPDATED
+
+  @@map("driver_activity_type")
+}
+
+// ---------------------------------------------------------------------------
+// PickupJob
+// ---------------------------------------------------------------------------
+
+/// Customer pickup request — one per order when pickup is required.
+model PickupJob {
+  id                String       @id @default(uuid()) @db.Uuid
+  orderId           String       @unique @map("order_id") @db.Uuid
+  driverId          String?      @map("driver_id") @db.Uuid
+  pickupAddressId   String       @map("pickup_address_id") @db.Uuid
+  scheduledPickupAt DateTime?    @map("scheduled_pickup_at") @db.Timestamptz(6)
+  assignedAt        DateTime?    @map("assigned_at") @db.Timestamptz(6)
+  acceptedAt        DateTime?    @map("accepted_at") @db.Timestamptz(6)
+  arrivedAt         DateTime?    @map("arrived_at") @db.Timestamptz(6)
+  completedAt       DateTime?    @map("completed_at") @db.Timestamptz(6)
+  status            PickupStatus @default(WAITING_ASSIGNMENT)
+  notes             String?      @db.Text
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt         DateTime?    @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  order         Order           @relation(fields: [orderId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  driver        Employee?       @relation("PickupJobDriver", fields: [driverId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  pickupAddress CustomerAddress @relation("PickupJobAddress", fields: [pickupAddressId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([driverId], map: "idx_pickup_jobs_driver_id")
+  @@index([status], map: "idx_pickup_jobs_status")
+  @@index([scheduledPickupAt], map: "idx_pickup_jobs_scheduled_pickup_at")
+  @@index([createdAt], map: "idx_pickup_jobs_created_at")
+  @@index([deletedAt], map: "idx_pickup_jobs_deleted_at")
+  @@map("pickup_jobs")
+}
+
+// ---------------------------------------------------------------------------
+// DeliveryJob
+// ---------------------------------------------------------------------------
+
+/// Customer delivery request — one per order when delivery is required.
+model DeliveryJob {
+  id                   String         @id @default(uuid()) @db.Uuid
+  orderId              String         @unique @map("order_id") @db.Uuid
+  driverId             String?        @map("driver_id") @db.Uuid
+  deliveryAddressId    String         @map("delivery_address_id") @db.Uuid
+  scheduledDeliveryAt  DateTime?      @map("scheduled_delivery_at") @db.Timestamptz(6)
+  assignedAt           DateTime?      @map("assigned_at") @db.Timestamptz(6)
+  acceptedAt           DateTime?      @map("accepted_at") @db.Timestamptz(6)
+  departedAt           DateTime?      @map("departed_at") @db.Timestamptz(6)
+  completedAt          DateTime?      @map("completed_at") @db.Timestamptz(6)
+  status               DeliveryStatus @default(WAITING_ASSIGNMENT)
+  proofPhotoUrl        String?        @map("proof_photo_url") @db.VarChar(500)
+  customerSignatureUrl String?        @map("customer_signature_url") @db.VarChar(500)
+  notes                String?        @db.Text
+  createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt            DateTime?      @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  order           Order           @relation(fields: [orderId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  driver          Employee?       @relation("DeliveryJobDriver", fields: [driverId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  deliveryAddress CustomerAddress @relation("DeliveryJobAddress", fields: [deliveryAddressId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([driverId], map: "idx_delivery_jobs_driver_id")
+  @@index([status], map: "idx_delivery_jobs_status")
+  @@index([scheduledDeliveryAt], map: "idx_delivery_jobs_scheduled_delivery_at")
+  @@index([createdAt], map: "idx_delivery_jobs_created_at")
+  @@index([deletedAt], map: "idx_delivery_jobs_deleted_at")
+  @@map("delivery_jobs")
+}
+
+// ---------------------------------------------------------------------------
+// DriverActivity
+// ---------------------------------------------------------------------------
+
+/// Driver operational history for GPS tracking and performance reporting.
+model DriverActivity {
+  id           String             @id @default(uuid()) @db.Uuid
+  driverId     String             @map("driver_id") @db.Uuid
+  orderId      String             @map("order_id") @db.Uuid
+  activityType DriverActivityType @map("activity_type")
+  latitude     Decimal?           @db.Decimal(10, 7)
+  longitude    Decimal?           @db.Decimal(10, 7)
+  description  String?            @db.Text
+  createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  driver Employee @relation("DriverActivityDriver", fields: [driverId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  order  Order    @relation(fields: [orderId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([driverId], map: "idx_driver_activities_driver_id")
+  @@index([orderId], map: "idx_driver_activities_order_id")
+  @@index([activityType], map: "idx_driver_activities_activity_type")
+  @@index([createdAt], map: "idx_driver_activities_created_at")
+  @@map("driver_activities")
+}
+
+// ===========================================================================
+// Notifications, Customer Service, Settings, Audit & Media Module
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Enums — Notifications & Customer Service
+// ---------------------------------------------------------------------------
+
+/// Notification category for filtering and routing.
+enum NotificationType {
+  ORDER
+  PAYMENT
+  IRONING
+  PICKUP
+  DELIVERY
+  SYSTEM
+  CUSTOMER_SERVICE
+
+  @@map("notification_type")
+}
+
+/// Customer service ticket lifecycle status.
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_CUSTOMER
+  RESOLVED
+  CLOSED
+
+  @@map("ticket_status")
+}
+
+/// Message sender identity within a customer service ticket.
+enum SenderType {
+  CUSTOMER
+  EMPLOYEE
+  SYSTEM
+
+  @@map("sender_type")
+}
+
+// ---------------------------------------------------------------------------
+// Notification
+// ---------------------------------------------------------------------------
+
+/// System-generated notification broadcast to employees.
+model Notification {
+  id               String           @id @default(uuid()) @db.Uuid
+  title            String           @db.VarChar(200)
+  body             String           @db.Text
+  type             NotificationType
+  priority         PriorityLevel    @default(NORMAL)
+  senderEmployeeId String?          @map("sender_employee_id") @db.Uuid
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  deletedAt        DateTime?        @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  senderEmployee Employee?          @relation("NotificationSender", fields: [senderEmployeeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  reads          NotificationRead[]
+
+  @@index([type], map: "idx_notifications_type")
+  @@index([priority], map: "idx_notifications_priority")
+  @@index([senderEmployeeId], map: "idx_notifications_sender_employee_id")
+  @@index([createdAt], map: "idx_notifications_created_at")
+  @@index([deletedAt], map: "idx_notifications_deleted_at")
+  @@map("notifications")
+}
+
+// ---------------------------------------------------------------------------
+// NotificationRead
+// ---------------------------------------------------------------------------
+
+/// Per-employee read status — supports unread badge counts.
+model NotificationRead {
+  id             String   @id @default(uuid()) @db.Uuid
+  notificationId String   @map("notification_id") @db.Uuid
+  employeeId     String   @map("employee_id") @db.Uuid
+  readAt         DateTime @default(now()) @map("read_at") @db.Timestamptz(6)
+
+  // Relations
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  employee     Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([notificationId, employeeId], map: "idx_notification_reads_unique")
+  @@index([notificationId], map: "idx_notification_reads_notification_id")
+  @@index([employeeId], map: "idx_notification_reads_employee_id")
+  @@index([readAt], map: "idx_notification_reads_read_at")
+  @@map("notification_reads")
+}
+
+// ---------------------------------------------------------------------------
+// NotificationTemplate
+// ---------------------------------------------------------------------------
+
+/// Reusable notification message templates.
+model NotificationTemplate {
+  id        String    @id @default(uuid()) @db.Uuid
+  code      String    @unique @db.VarChar(50)
+  title     String    @db.VarChar(200)
+  body      String    @db.Text
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@index([isActive], map: "idx_notification_templates_is_active")
+  @@index([deletedAt], map: "idx_notification_templates_deleted_at")
+  @@map("notification_templates")
+}
+
+// ---------------------------------------------------------------------------
+// CustomerServiceTicket
+// ---------------------------------------------------------------------------
+
+/// Customer service conversation ticket.
+model CustomerServiceTicket {
+  id         String        @id @default(uuid()) @db.Uuid
+  customerId String        @map("customer_id") @db.Uuid
+  employeeId String?       @map("employee_id") @db.Uuid
+  subject    String        @db.VarChar(200)
+  status     TicketStatus  @default(OPEN)
+  priority   PriorityLevel @default(NORMAL)
+  createdAt  DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  closedAt   DateTime?     @map("closed_at") @db.Timestamptz(6)
+  deletedAt  DateTime?     @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  customer Customer                 @relation(fields: [customerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  employee Employee?                @relation("CsTicketAssignee", fields: [employeeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  messages CustomerServiceMessage[]
+
+  @@index([customerId], map: "idx_customer_service_tickets_customer_id")
+  @@index([employeeId], map: "idx_customer_service_tickets_employee_id")
+  @@index([status], map: "idx_customer_service_tickets_status")
+  @@index([priority], map: "idx_customer_service_tickets_priority")
+  @@index([createdAt], map: "idx_customer_service_tickets_created_at")
+  @@index([deletedAt], map: "idx_customer_service_tickets_deleted_at")
+  @@map("customer_service_tickets")
+}
+
+// ---------------------------------------------------------------------------
+// CustomerServiceMessage
+// ---------------------------------------------------------------------------
+
+/// Individual message within a customer service ticket.
+model CustomerServiceMessage {
+  id         String     @id @default(uuid()) @db.Uuid
+  ticketId   String     @map("ticket_id") @db.Uuid
+  senderType SenderType @map("sender_type")
+  employeeId String?    @map("employee_id") @db.Uuid
+  customerId String?    @map("customer_id") @db.Uuid
+  message    String     @db.Text
+  createdAt  DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  ticket      CustomerServiceTicket       @relation(fields: [ticketId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  employee    Employee?                   @relation(fields: [employeeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  customer    Customer?                   @relation(fields: [customerId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  attachments CustomerServiceAttachment[]
+
+  @@index([ticketId], map: "idx_customer_service_messages_ticket_id")
+  @@index([employeeId], map: "idx_customer_service_messages_employee_id")
+  @@index([customerId], map: "idx_customer_service_messages_customer_id")
+  @@index([senderType], map: "idx_customer_service_messages_sender_type")
+  @@index([createdAt], map: "idx_customer_service_messages_created_at")
+  @@map("customer_service_messages")
+}
+
+// ---------------------------------------------------------------------------
+// CustomerServiceAttachment
+// ---------------------------------------------------------------------------
+
+/// File attachment on a customer service message.
+model CustomerServiceAttachment {
+  id        String   @id @default(uuid()) @db.Uuid
+  messageId String   @map("message_id") @db.Uuid
+  fileName  String   @map("file_name") @db.VarChar(255)
+  fileUrl   String   @map("file_url") @db.VarChar(500)
+  mimeType  String   @map("mime_type") @db.VarChar(100)
+  fileSize  BigInt   @map("file_size")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  message CustomerServiceMessage @relation(fields: [messageId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([messageId], map: "idx_customer_service_attachments_message_id")
+  @@index([createdAt], map: "idx_customer_service_attachments_created_at")
+  @@map("customer_service_attachments")
+}
+
+// ---------------------------------------------------------------------------
+// CompanySetting
+// ---------------------------------------------------------------------------
+
+/// Company profile and branding configuration.
+model CompanySetting {
+  id          String   @id @default(uuid()) @db.Uuid
+  companyName String   @map("company_name") @db.VarChar(200)
+  phone       String?  @db.VarChar(20)
+  email       String?  @db.VarChar(150)
+  address     String?  @db.Text
+  logoUrl     String?  @map("logo_url") @db.VarChar(500)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("company_settings")
+}
+
+// ---------------------------------------------------------------------------
+// ReceiptSetting
+// ---------------------------------------------------------------------------
+
+/// Receipt printing and display configuration.
+model ReceiptSetting {
+  id         String   @id @default(uuid()) @db.Uuid
+  showLogo   Boolean  @default(true) @map("show_logo")
+  showQRCode Boolean  @default(false) @map("show_qr_code")
+  footerText String?  @map("footer_text") @db.Text
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("receipt_settings")
+}
+
+// ---------------------------------------------------------------------------
+// QueueSetting
+// ---------------------------------------------------------------------------
+
+/// Queue number generation configuration.
+model QueueSetting {
+  id             String   @id @default(uuid()) @db.Uuid
+  prefix         String   @default("Q") @db.VarChar(10)
+  dailyReset     Boolean  @default(true) @map("daily_reset")
+  startingNumber Int      @default(1) @map("starting_number")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("queue_settings")
+}
+
+// ---------------------------------------------------------------------------
+// SystemSetting
+// ---------------------------------------------------------------------------
+
+/// Key-value system configuration store.
+model SystemSetting {
+  id           String   @id @default(uuid()) @db.Uuid
+  settingKey   String   @unique @map("setting_key") @db.VarChar(100)
+  settingValue String   @map("setting_value") @db.Text
+  description  String?  @db.Text
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("system_settings")
+}
+
+// ---------------------------------------------------------------------------
+// AuditLog
+// ---------------------------------------------------------------------------
+
+/// Immutable audit trail for important system activities.
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  employeeId  String?  @map("employee_id") @db.Uuid
+  module      String   @db.VarChar(50)
+  action      String   @db.VarChar(100)
+  referenceId String?  @map("reference_id") @db.Uuid
+  description String?  @db.Text
+  ipAddress   String?  @map("ip_address") @db.VarChar(45)
+  userAgent   String?  @map("user_agent") @db.VarChar(500)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  employee Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([employeeId], map: "idx_audit_logs_employee_id")
+  @@index([module, action], map: "idx_audit_logs_module_action")
+  @@index([referenceId], map: "idx_audit_logs_reference_id")
+  @@index([createdAt], map: "idx_audit_logs_created_at")
+  @@map("audit_logs")
+}
+
+// ---------------------------------------------------------------------------
+// MediaFile
+// ---------------------------------------------------------------------------
+
+/// Centralized uploaded file metadata — reusable across all modules.
+model MediaFile {
+  id                   String    @id @default(uuid()) @db.Uuid
+  fileName             String    @map("file_name") @db.VarChar(255)
+  fileUrl              String    @map("file_url") @db.VarChar(500)
+  mimeType             String    @map("mime_type") @db.VarChar(100)
+  fileSize             BigInt    @map("file_size")
+  uploadedByEmployeeId String    @map("uploaded_by_employee_id") @db.Uuid
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt            DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  uploadedByEmployee Employee @relation(fields: [uploadedByEmployeeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([uploadedByEmployeeId], map: "idx_media_files_uploaded_by_employee_id")
+  @@index([mimeType], map: "idx_media_files_mime_type")
+  @@index([createdAt], map: "idx_media_files_created_at")
+  @@index([deletedAt], map: "idx_media_files_deleted_at")
+  @@map("media_files")
+}
+
+// ===========================================================================
+// Payroll Module
+// ===========================================================================
+
+enum PayrollRecordStatus {
+  DRAFT
+  CALCULATED
+  APPROVED
+  PAID
+
+  @@map("payroll_record_status")
+}
+
+enum PayrollBonusType {
+  ATTENDANCE
+  PERFORMANCE
+  HOLIDAY
+  MANUAL
+
+  @@map("payroll_bonus_type")
+}
+
+enum PayrollDeductionType {
+  ADVANCE
+  PENALTY
+  LOAN
+  OTHER
+
+  @@map("payroll_deduction_type")
+}
+
+enum PayrollPaymentMethod {
+  CASH
+  TRANSFER
+  WALLET
+
+  @@map("payroll_payment_method")
+}
+
+model PayrollRecord {
+  id                     String              @id @default(uuid()) @db.Uuid
+  payrollNumber          String              @unique @map("payroll_number") @db.VarChar(50)
+  employeeId             String              @map("employee_id") @db.Uuid
+  periodStart            DateTime            @map("period_start") @db.Date
+  periodEnd              DateTime            @map("period_end") @db.Date
+  role                   String              @db.VarChar(50)
+  status                 PayrollRecordStatus @default(DRAFT)
+  laundryKg              Decimal             @default(0) @map("laundry_kg") @db.Decimal(15, 2)
+  laundryPiece           Decimal             @default(0) @map("laundry_piece") @db.Decimal(15, 2)
+  ironingKg              Decimal             @default(0) @map("ironing_kg") @db.Decimal(15, 2)
+  ironingPiece           Decimal             @default(0) @map("ironing_piece") @db.Decimal(15, 2)
+  ordersFinished         Int                 @default(0) @map("orders_finished")
+  productionSalary       Decimal             @default(0) @map("production_salary") @db.Decimal(15, 2)
+  presentDays            Int                 @default(0) @map("present_days")
+  absentDays             Int                 @default(0) @map("absent_days")
+  lateDays               Int                 @default(0) @map("late_days")
+  leaveDays              Int                 @default(0) @map("leave_days")
+  baseSalary             Decimal             @default(0) @map("base_salary") @db.Decimal(15, 2)
+  grossSalary            Decimal             @default(0) @map("gross_salary") @db.Decimal(15, 2)
+  totalBonus             Decimal             @default(0) @map("total_bonus") @db.Decimal(15, 2)
+  totalDeduction         Decimal             @default(0) @map("total_deduction") @db.Decimal(15, 2)
+  netSalary              Decimal             @default(0) @map("net_salary") @db.Decimal(15, 2)
+  calculatedAt           DateTime?           @map("calculated_at") @db.Timestamptz(6)
+  calculatedByEmployeeId String?             @map("calculated_by_employee_id") @db.Uuid
+  approvedAt             DateTime?           @map("approved_at") @db.Timestamptz(6)
+  approvedByEmployeeId   String?             @map("approved_by_employee_id") @db.Uuid
+  paidAt                 DateTime?           @map("paid_at") @db.Timestamptz(6)
+  paidByEmployeeId       String?             @map("paid_by_employee_id") @db.Uuid
+  createdAt              DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt              DateTime?           @map("deleted_at") @db.Timestamptz(6)
+
+  employee         Employee               @relation(fields: [employeeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  bonuses          PayrollBonus[]
+  deductions       PayrollDeduction[]
+  approvalHistory  PayrollApprovalEvent[]
+  payments         PayrollPayment[]
+
+  @@index([employeeId], map: "idx_payroll_records_employee_id")
+  @@index([periodStart, periodEnd], map: "idx_payroll_records_period")
+  @@index([status], map: "idx_payroll_records_status")
+  @@index([deletedAt], map: "idx_payroll_records_deleted_at")
+  @@map("payroll_records")
+}
+
+model PayrollBonus {
+  id              String           @id @default(uuid()) @db.Uuid
+  payrollRecordId String           @map("payroll_record_id") @db.Uuid
+  type            PayrollBonusType
+  amount          Decimal          @db.Decimal(15, 2)
+  notes           String?          @db.Text
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  payrollRecord PayrollRecord @relation(fields: [payrollRecordId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([payrollRecordId], map: "idx_payroll_bonuses_payroll_record_id")
+  @@map("payroll_bonuses")
+}
+
+model PayrollDeduction {
+  id              String               @id @default(uuid()) @db.Uuid
+  payrollRecordId String               @map("payroll_record_id") @db.Uuid
+  type            PayrollDeductionType
+  amount          Decimal              @db.Decimal(15, 2)
+  notes           String?              @db.Text
+  createdAt       DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  payrollRecord PayrollRecord @relation(fields: [payrollRecordId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([payrollRecordId], map: "idx_payroll_deductions_payroll_record_id")
+  @@map("payroll_deductions")
+}
+
+model PayrollApprovalEvent {
+  id              String              @id @default(uuid()) @db.Uuid
+  payrollRecordId String              @map("payroll_record_id") @db.Uuid
+  status          PayrollRecordStatus
+  notes           String?             @db.Text
+  actorEmployeeId String              @map("actor_employee_id") @db.Uuid
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  payrollRecord PayrollRecord @relation(fields: [payrollRecordId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  actor         Employee      @relation("PayrollApprovalActor", fields: [actorEmployeeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([payrollRecordId], map: "idx_payroll_approval_events_payroll_record_id")
+  @@map("payroll_approval_events")
+}
+
+model PayrollPayment {
+  id              String               @id @default(uuid()) @db.Uuid
+  payrollRecordId String               @map("payroll_record_id") @db.Uuid
+  method          PayrollPaymentMethod
+  amount          Decimal              @db.Decimal(15, 2)
+  referenceNumber String?              @map("reference_number") @db.VarChar(50)
+  notes           String?              @db.Text
+  paidAt          DateTime             @map("paid_at") @db.Timestamptz(6)
+  paidByEmployeeId String              @map("paid_by_employee_id") @db.Uuid
+  createdAt       DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  payrollRecord PayrollRecord @relation(fields: [payrollRecordId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  paidBy        Employee      @relation("PayrollPaymentActor", fields: [paidByEmployeeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([payrollRecordId], map: "idx_payroll_payments_payroll_record_id")
+  @@map("payroll_payments")
+}
