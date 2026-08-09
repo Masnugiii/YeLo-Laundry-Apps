@@ -65,13 +65,44 @@ class FinanceRepository {
     );
   }
 
-  Future<PaymentTransaction> createPayment(Map<String, dynamic> payload) async {
+  Future<Map<String, dynamic>> createPayment(Map<String, dynamic> payload) async {
     final data = await _apiClient.post<Map<String, dynamic>>(
       '/payments',
       data: payload,
       parser: (json) => json as Map<String, dynamic>,
     );
-    return _mapPayment(data);
+
+    final paymentMethod = data['paymentMethod'];
+
+    return {
+      'id': data['id'],
+      'referenceNumber': data['referenceNumber'],
+      'amount': (data['amount'] as num?)?.toDouble() ?? 0,
+      'paymentMethod': paymentMethod is Map<String, dynamic>
+          ? paymentMethod['apiCode'] ?? paymentMethod['code']
+          : paymentMethod,
+      'paidAt': data['paidAt'],
+    };
+  }
+
+  Future<Map<String, dynamic>> createExpense(Map<String, dynamic> payload) async {
+    final data = await _apiClient.post<Map<String, dynamic>>(
+      '/expenses',
+      data: payload,
+      parser: (json) => json as Map<String, dynamic>,
+    );
+    return data;
+  }
+
+  Future<List<Map<String, dynamic>>> fetchExpenseCategories() async {
+    final data = await _apiClient.get<List<dynamic>>(
+      '/expenses/categories',
+      parser: (json) => json as List<dynamic>,
+    );
+
+    return data
+        .map((item) => Map<String, dynamic>.from(item as Map))
+        .toList();
   }
 
   PaymentTransaction _mapPayment(Map<String, dynamic> json) {

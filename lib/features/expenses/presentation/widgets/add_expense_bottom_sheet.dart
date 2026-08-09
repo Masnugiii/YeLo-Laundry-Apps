@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
+import 'package:yelo_laundry_erp/core/providers/core_providers.dart';
 import 'package:yelo_laundry_erp/features/expenses/data/dummy_expenses.dart';
 import 'package:yelo_laundry_erp/features/expenses/models/expense.dart';
 import 'package:yelo_laundry_erp/features/expenses/presentation/expense_theme.dart';
@@ -34,22 +36,38 @@ void showAddExpenseBottomSheet(
   );
 }
 
-class _AddExpenseBottomSheet extends StatefulWidget {
+const _categoryCodeMap = <ExpenseCategory, String>{
+  ExpenseCategory.pengeluaranSampah: 'OTHER',
+  ExpenseCategory.beliGas: 'LAUNDRY_SUPPLIES',
+  ExpenseCategory.beliGalon: 'WATER',
+  ExpenseCategory.bayarListrik: 'ELECTRICITY',
+  ExpenseCategory.beliRinso: 'LAUNDRY_SUPPLIES',
+  ExpenseCategory.beliPlastik: 'LAUNDRY_SUPPLIES',
+  ExpenseCategory.jasaCleaningYelo: 'MAINTENANCE',
+  ExpenseCategory.transportKurir: 'TRANSPORTATION',
+  ExpenseCategory.atk: 'OTHER',
+  ExpenseCategory.perawatanMesin: 'MAINTENANCE',
+  ExpenseCategory.lainnya: 'OTHER',
+};
+
+class _AddExpenseBottomSheet extends ConsumerStatefulWidget {
   const _AddExpenseBottomSheet({required this.onSaved});
 
   final ValueChanged<Expense> onSaved;
 
   @override
-  State<_AddExpenseBottomSheet> createState() => _AddExpenseBottomSheetState();
+  ConsumerState<_AddExpenseBottomSheet> createState() =>
+      _AddExpenseBottomSheetState();
 }
 
-class _AddExpenseBottomSheetState extends State<_AddExpenseBottomSheet> {
+class _AddExpenseBottomSheetState extends ConsumerState<_AddExpenseBottomSheet> {
   final _amountController = TextEditingController();
   final _descriptionController = TextEditingController();
 
   ExpenseCategory _selectedCategory = ExpenseCategory.pengeluaranSampah;
   ExpenseAdmin _selectedAdmin = dummyCurrentExpenseAdmin;
   late final DateTime _dateTime;
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -89,9 +107,9 @@ class _AddExpenseBottomSheetState extends State<_AddExpenseBottomSheet> {
     return '$hour:$minute WIB';
   }
 
-  void _save() {
+  Future<void> _save() async {
     final amount = int.tryParse(_amountController.text) ?? 0;
-    if (amount <= 0) {
+    if (amount <= 0 || _isSaving) {
       return;
     }
 
@@ -99,18 +117,44 @@ class _AddExpenseBottomSheetState extends State<_AddExpenseBottomSheet> {
         ? _descriptionController.text.trim()
         : null;
 
-    final expense = Expense(
-      id: 'exp-new-${DateTime.now().millisecondsSinceEpoch}',
-      category: _selectedCategory,
-      amount: amount,
-      adminName: _selectedAdmin.name,
-      dateTime: _dateTime,
-      description:
-          description == null || description.isEmpty ? null : description,
-    );
+    setState(() => _isSaving = true);
 
-    widget.onSaved(expense);
-    Navigator.of(context).pop();
+    try {
+      final response = await ref.read(financeRepositoryProvider).createExpense({
+        'categoryCode': _categoryCodeMap[_selectedCategory] ?? 'OTHER',
+        'title': _selectedCategory.label,
+        if (description != null && description.isNotEmpty)
+          'description': description,
+        'amount': amount,
+        'expenseDate': _dateTime.toIso8601String(),
+      });
+
+      final expense = Expense(
+        id: response['id'] as String? ?? '',
+        category: _selectedCategory,
+        amount: amount,
+        adminName: _selectedAdmin.name,
+        dateTime: _dateTime,
+        description:
+            description == null || description.isEmpty ? null : description,
+      );
+
+      if (!mounted) return;
+      widget.onSaved(expense);
+      Navigator.of(context).pop();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Gagal menyimpan pengeluaran.',
+            style: GoogleFonts.poppins(),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
   }
 
   @override
@@ -286,7 +330,7 @@ class _AddExpenseBottomSheetState extends State<_AddExpenseBottomSheet> {
               width: double.infinity,
               height: 48,
               child: FilledButton(
-                onPressed: _save,
+                onPressed: _isSaving ? null : _save,
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: AppColors.onPrimary,
@@ -295,7 +339,7 @@ class _AddExpenseBottomSheetState extends State<_AddExpenseBottomSheet> {
                   ),
                 ),
                 child: Text(
-                  'Simpan Pengeluaran',
+                  _isSaving ? 'Menyimpan...' : 'Simpan Pengeluaran',
                   style: GoogleFonts.poppins(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,

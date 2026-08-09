@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
-import 'package:yelo_laundry_erp/features/orders/data/order_payment_store.dart';
+import 'package:yelo_laundry_erp/core/network/api_exception.dart';
 import 'package:yelo_laundry_erp/features/orders/models/order_payment.dart';
 import 'package:yelo_laundry_erp/features/orders/presentation/payment/payment_flow_theme.dart';
-import 'package:yelo_laundry_erp/features/orders/presentation/widgets/order_payment_bottom_sheet.dart';
+import 'package:yelo_laundry_erp/features/orders/services/order_payment_service.dart';
 
-class QrisPaymentScreen extends StatelessWidget {
+class QrisPaymentScreen extends ConsumerStatefulWidget {
   const QrisPaymentScreen({
     super.key,
     required this.session,
@@ -17,18 +18,57 @@ class QrisPaymentScreen extends StatelessWidget {
 
   final OrderPaymentSession session;
 
-  Future<void> _completePayment(BuildContext context) async {
-    final confirmation = buildPaymentConfirmation(session: session);
+  @override
+  ConsumerState<QrisPaymentScreen> createState() => _QrisPaymentScreenState();
+}
 
-    recordOrderPaymentToUangMasuk(
-      order: session.order,
-      confirmation: confirmation,
-    );
+class _QrisPaymentScreenState extends ConsumerState<QrisPaymentScreen> {
+  bool _isSubmitting = false;
 
-    await context.push('/order-payment-success', extra: confirmation);
+  Future<void> _completePayment() async {
+    if (_isSubmitting) return;
 
-    if (context.mounted) {
+    setState(() => _isSubmitting = true);
+
+    try {
+      final confirmation = await ref
+          .read(orderPaymentServiceProvider)
+          .submitPayment(widget.session);
+
+      if (!mounted) return;
+
+      await context.push('/order-payment-success', extra: confirmation);
+
+      if (!mounted) return;
       context.pop(confirmation);
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppColors.error,
+          content: Text(
+            error.message,
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppColors.error,
+          content: Text(
+            'Gagal memproses pembayaran. Silakan coba lagi.',
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
   }
 
@@ -142,12 +182,21 @@ class QrisPaymentScreen extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.s12),
           FilledButton(
-            onPressed: () => _completePayment(context),
+            onPressed: _isSubmitting ? null : _completePayment,
             style: PaymentFlowTheme.primaryButtonStyle,
-            child: Text(
-              'Konfirmasi Pembayaran',
-              style: PaymentFlowTheme.primaryButtonTextStyle,
-            ),
+            child: _isSubmitting
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.onPrimary,
+                    ),
+                  )
+                : Text(
+                    'Konfirmasi Pembayaran',
+                    style: PaymentFlowTheme.primaryButtonTextStyle,
+                  ),
           ),
         ],
       ),

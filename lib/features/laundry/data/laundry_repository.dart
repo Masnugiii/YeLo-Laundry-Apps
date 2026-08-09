@@ -13,6 +13,29 @@ class LaundryRepository {
     );
   }
 
+  Future<List<Map<String, dynamic>>> fetchIroningQueue() async {
+    final data = await _apiClient.get<List<dynamic>>(
+      '/laundry/queues/ironing',
+      parser: (json) => json as List<dynamic>,
+    );
+
+    return data.map((item) => item as Map<String, dynamic>).toList();
+  }
+
+  Future<Map<String, dynamic>> runAction(
+    String orderId,
+    String action, {
+    String? notes,
+  }) async {
+    return _apiClient.post<Map<String, dynamic>>(
+      '/laundry/orders/$orderId/$action',
+      data: {
+        if (notes != null && notes.isNotEmpty) 'notes': notes,
+      },
+      parser: (json) => json as Map<String, dynamic>,
+    );
+  }
+
   Future<PaginatedResponse<Map<String, dynamic>>> fetchQueue({
     int page = 1,
     int limit = 20,

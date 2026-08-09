@@ -4,9 +4,11 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
+import 'package:yelo_laundry_erp/core/providers/core_providers.dart';
 import 'package:yelo_laundry_erp/features/attendance/presentation/binatu_attendance_history_screen.dart';
 import 'package:yelo_laundry_erp/features/attendance/presentation/widgets/binatu_attendance_cards.dart';
 import 'package:yelo_laundry_erp/features/attendance/providers/binatu_attendance_provider.dart';
+import 'package:yelo_laundry_erp/shared/widgets/api_state_widgets.dart';
 
 class BinatuAttendanceScreen extends ConsumerWidget {
   const BinatuAttendanceScreen({
@@ -15,6 +17,12 @@ class BinatuAttendanceScreen extends ConsumerWidget {
   });
 
   final bool showBackButton;
+
+  static const _locationPayload = {
+    'latitude': -6.2088,
+    'longitude': 106.8456,
+    'accuracy': 10.0,
+  };
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -56,10 +64,7 @@ class BinatuAttendanceScreen extends ConsumerWidget {
               Expanded(
                 child: FilledButton.icon(
                   onPressed: attendance.canCheckIn
-                      ? () {
-                          ref.read(binatuAttendanceProvider.notifier).checkIn();
-                          _showSnackBar(context, 'Check In berhasil dicatat.');
-                        }
+                      ? () => _handleCheckIn(context, ref)
                       : null,
                   icon: const Icon(Icons.login),
                   label: Text(
@@ -85,10 +90,7 @@ class BinatuAttendanceScreen extends ConsumerWidget {
               Expanded(
                 child: FilledButton.icon(
                   onPressed: attendance.canCheckOut
-                      ? () {
-                          ref.read(binatuAttendanceProvider.notifier).checkOut();
-                          _showSnackBar(context, 'Check Out berhasil dicatat.');
-                        }
+                      ? () => _handleCheckOut(context, ref)
                       : null,
                   icon: const Icon(Icons.logout),
                   label: Text(
@@ -149,11 +151,55 @@ class BinatuAttendanceScreen extends ConsumerWidget {
     );
   }
 
-  void _showSnackBar(BuildContext context, String message) {
+  Future<void> _handleCheckIn(BuildContext context, WidgetRef ref) async {
+    try {
+      await ref
+          .read(attendanceRepositoryProvider)
+          .checkIn(_locationPayload);
+      ref.read(binatuAttendanceProvider.notifier).checkIn();
+      if (context.mounted) {
+        _showSnackBar(context, 'Check In berhasil dicatat.');
+      }
+    } catch (error) {
+      if (context.mounted) {
+        _showSnackBar(
+          context,
+          messageFromError(error),
+          isError: true,
+        );
+      }
+    }
+  }
+
+  Future<void> _handleCheckOut(BuildContext context, WidgetRef ref) async {
+    try {
+      await ref
+          .read(attendanceRepositoryProvider)
+          .checkOut(_locationPayload);
+      ref.read(binatuAttendanceProvider.notifier).checkOut();
+      if (context.mounted) {
+        _showSnackBar(context, 'Check Out berhasil dicatat.');
+      }
+    } catch (error) {
+      if (context.mounted) {
+        _showSnackBar(
+          context,
+          messageFromError(error),
+          isError: true,
+        );
+      }
+    }
+  }
+
+  void _showSnackBar(
+    BuildContext context,
+    String message, {
+    bool isError = false,
+  }) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         behavior: SnackBarBehavior.floating,
-        backgroundColor: AppColors.primary,
+        backgroundColor: isError ? AppColors.error : AppColors.primary,
         content: Text(
           message,
           style: GoogleFonts.poppins(

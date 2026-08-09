@@ -9,6 +9,7 @@ import 'package:yelo_laundry_erp/features/dashboard/data/dummy_dashboard_employe
 import 'package:yelo_laundry_erp/features/dashboard/models/cashier_laundry_permissions.dart';
 import 'package:yelo_laundry_erp/features/dashboard/models/user_role.dart';
 import 'package:yelo_laundry_erp/features/dashboard/providers/operator_dashboard_badge_provider.dart';
+import 'package:yelo_laundry_erp/features/dashboard/providers/operational_summary_provider.dart';
 import 'package:yelo_laundry_erp/features/dashboard/presentation/cashier/cashier_settings_screen.dart';
 import 'package:yelo_laundry_erp/features/dashboard/presentation/owner/widgets/pos_activity_tile.dart';
 import 'package:yelo_laundry_erp/features/dashboard/presentation/owner/widgets/pos_header.dart';
@@ -61,6 +62,7 @@ class _CashierLaundryBerandaPage extends ConsumerWidget {
     final operatorAssistanceCount =
         ref.read(binatuOrderProvider.notifier).operatorAssistanceCompletedCount();
     final badgeState = ref.watch(operatorDashboardBadgeProvider);
+    final summaryAsync = ref.watch(operationalSummaryProvider);
 
     return Column(
       children: [
@@ -83,21 +85,42 @@ class _CashierLaundryBerandaPage extends ConsumerWidget {
               children: [
                 const PosSectionTitle(title: 'Operasional'),
                 const SizedBox(height: AppSpacing.s16),
-                const PosOperationalSummaryRow(
-                  items: [
-                    PosOperationalSummaryItem(
-                      value: '6',
-                      label: 'Order Baru',
+                summaryAsync.when(
+                  loading: () => const Center(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: AppSpacing.s16),
+                      child: CircularProgressIndicator(color: AppColors.primary),
                     ),
-                    PosOperationalSummaryItem(
-                      value: '9',
-                      label: 'Sedang Diproses',
-                    ),
-                    PosOperationalSummaryItem(
-                      value: '4',
-                      label: 'Siap Diambil',
-                    ),
-                  ],
+                  ),
+                  error: (_, __) => const PosOperationalSummaryRow(
+                    items: [
+                      PosOperationalSummaryItem(value: '-', label: 'Order Baru'),
+                      PosOperationalSummaryItem(
+                        value: '-',
+                        label: 'Sedang Diproses',
+                      ),
+                      PosOperationalSummaryItem(
+                        value: '-',
+                        label: 'Siap Diambil',
+                      ),
+                    ],
+                  ),
+                  data: (summary) => PosOperationalSummaryRow(
+                    items: [
+                      PosOperationalSummaryItem(
+                        value: '${summary.newOrders}',
+                        label: 'Order Baru',
+                      ),
+                      PosOperationalSummaryItem(
+                        value: '${summary.inProgress}',
+                        label: 'Sedang Diproses',
+                      ),
+                      PosOperationalSummaryItem(
+                        value: '${summary.readyForPickup}',
+                        label: 'Siap Diambil',
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.s32),
                 const PosSectionTitle(title: 'Kontribusi Operasional'),

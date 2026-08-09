@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
-import 'package:yelo_laundry_erp/features/new_order/data/dummy_laundry_services.dart';
+import 'package:yelo_laundry_erp/features/catalog/providers/catalog_provider.dart';
 import 'package:yelo_laundry_erp/features/new_order/models/laundry_service.dart';
+import 'package:yelo_laundry_erp/shared/widgets/api_state_widgets.dart';
 
 void showServiceBottomSheet(
   BuildContext context, {
@@ -18,13 +20,15 @@ void showServiceBottomSheet(
   );
 }
 
-class _ServiceBottomSheet extends StatelessWidget {
+class _ServiceBottomSheet extends ConsumerWidget {
   const _ServiceBottomSheet({required this.onServiceSelected});
 
   final ValueChanged<LaundryService> onServiceSelected;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final servicesAsync = ref.watch(catalogProvider);
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.s20,
@@ -57,17 +61,48 @@ class _ServiceBottomSheet extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.s16),
           Flexible(
-            child: ListView.separated(
-              shrinkWrap: true,
-              itemCount: dummyLaundryServices.length,
-              separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.s12),
-              itemBuilder: (context, index) {
-                final service = dummyLaundryServices[index];
-                return _ServiceListTile(
-                  service: service,
-                  onTap: () {
-                    onServiceSelected(service);
-                    Navigator.pop(context);
+            child: servicesAsync.when(
+              loading: () => const SizedBox(
+                height: 200,
+                child: ApiLoadingView(message: 'Memuat layanan...'),
+              ),
+              error: (error, _) => SizedBox(
+                height: 200,
+                child: ApiErrorView(
+                  message: messageFromError(error),
+                  onRetry: () => ref.invalidate(catalogProvider),
+                ),
+              ),
+              data: (services) {
+                if (services.isEmpty) {
+                  return SizedBox(
+                    height: 120,
+                    child: Center(
+                      child: Text(
+                        'Belum ada layanan aktif.',
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                  );
+                }
+
+                return ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: services.length,
+                  separatorBuilder: (_, _) =>
+                      const SizedBox(height: AppSpacing.s12),
+                  itemBuilder: (context, index) {
+                    final service = services[index];
+                    return _ServiceListTile(
+                      service: service,
+                      onTap: () {
+                        onServiceSelected(service);
+                        Navigator.pop(context);
+                      },
+                    );
                   },
                 );
               },

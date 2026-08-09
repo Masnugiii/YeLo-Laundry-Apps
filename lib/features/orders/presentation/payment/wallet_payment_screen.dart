@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
+import 'package:yelo_laundry_erp/core/network/api_exception.dart';
 import 'package:yelo_laundry_erp/features/new_order/utils/currency_formatter.dart';
-import 'package:yelo_laundry_erp/features/orders/data/order_payment_store.dart';
 import 'package:yelo_laundry_erp/features/orders/models/order_payment.dart';
 import 'package:yelo_laundry_erp/features/orders/presentation/payment/payment_flow_theme.dart';
 import 'package:yelo_laundry_erp/features/orders/presentation/payment/widgets/payment_summary_section.dart';
-import 'package:yelo_laundry_erp/features/orders/presentation/widgets/order_payment_bottom_sheet.dart';
+import 'package:yelo_laundry_erp/features/orders/services/order_payment_service.dart';
 
-class WalletPaymentScreen extends StatelessWidget {
+class WalletPaymentScreen extends ConsumerStatefulWidget {
   const WalletPaymentScreen({
     super.key,
     required this.session,
@@ -19,29 +20,70 @@ class WalletPaymentScreen extends StatelessWidget {
 
   final OrderPaymentSession session;
 
-  Future<void> _completePayment(BuildContext context) async {
-    final total = session.order.orderValue;
-    final confirmation = buildPaymentConfirmation(
-      session: session,
-      walletBalanceBefore: dummyCustomerWalletBalance,
-      walletBalanceAfter: dummyCustomerWalletBalance - total,
-    );
+  @override
+  ConsumerState<WalletPaymentScreen> createState() =>
+      _WalletPaymentScreenState();
+}
 
-    recordOrderPaymentToUangMasuk(
-      order: session.order,
-      confirmation: confirmation,
-    );
+class _WalletPaymentScreenState extends ConsumerState<WalletPaymentScreen> {
+  bool _isSubmitting = false;
 
-    await context.push('/order-payment-success', extra: confirmation);
+  Future<void> _completePayment() async {
+    if (_isSubmitting) return;
 
-    if (context.mounted) {
+    final total = widget.session.order.orderValue;
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      final confirmation = await ref
+          .read(orderPaymentServiceProvider)
+          .submitPayment(
+            widget.session,
+            walletBalanceBefore: dummyCustomerWalletBalance,
+            walletBalanceAfter: dummyCustomerWalletBalance - total,
+          );
+
+      if (!mounted) return;
+
+      await context.push('/order-payment-success', extra: confirmation);
+
+      if (!mounted) return;
       context.pop(confirmation);
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppColors.error,
+          content: Text(
+            error.message,
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppColors.error,
+          content: Text(
+            'Gagal memproses pembayaran. Silakan coba lagi.',
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final total = session.order.orderValue;
+    final total = widget.session.order.orderValue;
     final remaining = dummyCustomerWalletBalance - total;
 
     return Scaffold(
@@ -89,26 +131,26 @@ class WalletPaymentScreen extends StatelessWidget {
                   value: formatRupiah(remaining),
                   emphasized: true,
                 ),
-                const SizedBox(height: AppSpacing.s8),
-                Text(
-                  'Potong saldo dompet akan diintegrasikan pada versi berikutnya.',
-                  style: GoogleFonts.poppins(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w400,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
               ],
             ),
           ),
           const SizedBox(height: AppSpacing.s24),
           FilledButton(
-            onPressed: () => _completePayment(context),
+            onPressed: _isSubmitting ? null : _completePayment,
             style: PaymentFlowTheme.primaryButtonStyle,
-            child: Text(
-              'Potong Saldo Dompet',
-              style: PaymentFlowTheme.primaryButtonTextStyle,
-            ),
+            child: _isSubmitting
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.onPrimary,
+                    ),
+                  )
+                : Text(
+                    'Potong Saldo Dompet',
+                    style: PaymentFlowTheme.primaryButtonTextStyle,
+                  ),
           ),
         ],
       ),

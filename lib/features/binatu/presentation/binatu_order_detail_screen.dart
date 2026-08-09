@@ -28,7 +28,7 @@ class BinatuOrderDetailScreen extends ConsumerWidget {
     ref.watch(ironingQueuePriorityProvider);
     final role = ref.watch(userRoleProvider);
     final prioritySettings = ref.watch(ironingQueuePriorityProvider);
-    final orders = ref.watch(binatuOrderProvider);
+    final orders = ref.watch(binatuOrderProvider).value ?? [];
     BinatuIroningOrder? order;
     for (final item in orders) {
       if (item.id == orderId) {
@@ -274,7 +274,7 @@ class BinatuOrderDetailScreen extends ConsumerWidget {
     WidgetRef ref,
     BinatuIroningOrder order,
     UserRole role,
-  ) {
+  ) async {
     final notifier = ref.read(binatuOrderProvider.notifier);
 
     if (role == UserRole.laundry && order.canBinatuAccept) {
@@ -286,14 +286,18 @@ class BinatuOrderDetailScreen extends ConsumerWidget {
         )) {
       notifier.acceptJobAsOperator(order.id);
     } else if (order.canStartIroning) {
-      notifier.startIroning(order.id);
+      await notifier.startIroning(order.id);
     } else if (order.canFinishIroning) {
-      notifier.finishIroning(order.id);
+      await notifier.finishIroning(order.id);
     } else if (order.canMarkReadyForPickup) {
-      notifier.markReadyForPickup(order.id);
-      context.pop();
+      await notifier.markReadyForPickup(order.id);
+      if (context.mounted) {
+        context.pop();
+      }
       return;
     }
+
+    if (!context.mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(

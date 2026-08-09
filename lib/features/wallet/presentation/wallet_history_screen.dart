@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
-import 'package:yelo_laundry_erp/features/customer/data/dummy_customers.dart';
-import 'package:yelo_laundry_erp/features/customer/models/customer.dart';
 import 'package:yelo_laundry_erp/features/customer/presentation/widgets/customer_fab.dart';
-import 'package:yelo_laundry_erp/features/wallet/data/dummy_wallet_transactions.dart';
 import 'package:yelo_laundry_erp/features/wallet/presentation/widgets/wallet_transaction_tile.dart';
+import 'package:yelo_laundry_erp/features/wallet/providers/wallet_providers.dart';
+import 'package:yelo_laundry_erp/shared/widgets/api_state_widgets.dart';
 
-class WalletHistoryScreen extends StatelessWidget {
+class WalletHistoryScreen extends ConsumerWidget {
   const WalletHistoryScreen({
     super.key,
     required this.customerId,
@@ -18,15 +18,9 @@ class WalletHistoryScreen extends StatelessWidget {
   final String customerId;
 
   @override
-  Widget build(BuildContext context) {
-    Customer? customer;
-    for (final item in dummyCustomers) {
-      if (item.id == customerId) {
-        customer = item;
-        break;
-      }
-    }
-    final transactions = walletTransactionsForCustomer(customerId);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final transactionsAsync = ref.watch(walletTransactionsProvider(customerId));
+    final walletAsync = ref.watch(customerWalletProvider(customerId));
 
     return Scaffold(
       backgroundColor: AppColors.dashboardBackground,
@@ -46,8 +40,16 @@ class WalletHistoryScreen extends StatelessWidget {
           ),
         ),
       ),
-      body: transactions.isEmpty
-          ? Center(
+      body: transactionsAsync.when(
+        loading: () => const ApiLoadingView(),
+        error: (error, _) => ApiErrorView(
+          message: messageFromError(error),
+          onRetry: () =>
+              ref.invalidate(walletTransactionsProvider(customerId)),
+        ),
+        data: (transactions) {
+          if (transactions.isEmpty) {
+            return Center(
               child: Text(
                 'Belum ada riwayat transaksi',
                 style: GoogleFonts.poppins(
@@ -56,8 +58,17 @@ class WalletHistoryScreen extends StatelessWidget {
                   color: AppColors.textSecondary,
                 ),
               ),
-            )
-          : ListView(
+            );
+          }
+
+          return RefreshIndicator(
+            onRefresh: () async {
+              ref.invalidate(walletTransactionsProvider(customerId));
+              ref.invalidate(customerWalletProvider(customerId));
+              await ref.read(walletTransactionsProvider(customerId).future);
+            },
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(
                 AppSpacing.s20,
                 AppSpacing.s20,
@@ -65,11 +76,11 @@ class WalletHistoryScreen extends StatelessWidget {
                 AppSpacing.s32,
               ),
               children: [
-                if (customer != null)
-                  Padding(
+                walletAsync.maybeWhen(
+                  data: (wallet) => Padding(
                     padding: const EdgeInsets.only(bottom: AppSpacing.s16),
                     child: Text(
-                      customer.name,
+                      'Saldo saat ini: Rp${wallet.balance.round()}',
                       style: GoogleFonts.poppins(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -77,6 +88,8 @@ class WalletHistoryScreen extends StatelessWidget {
                       ),
                     ),
                   ),
+                  orElse: () => const SizedBox.shrink(),
+                ),
                 for (var i = 0; i < transactions.length; i++)
                   WalletTransactionTile(
                     transaction: transactions[i],
@@ -84,6 +97,9 @@ class WalletHistoryScreen extends StatelessWidget {
                   ),
               ],
             ),
+          );
+        },
+      ),
     );
   }
 }

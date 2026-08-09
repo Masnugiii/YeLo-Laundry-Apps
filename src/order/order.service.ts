@@ -26,7 +26,9 @@ import {
   toOrderDetail,
   toOrderListItem,
 } from './order.mapper';
+import { OrderAuditService } from './order-audit.service';
 import { OrderRepository } from './order.repository';
+import { OrderStatusTransitionService } from './order-status-transition.service';
 import { decodeOrderNotes, encodeOrderNotes } from './utils/order-meta.util';
 import { LoyaltyProcessorService } from '../loyalty/loyalty-processor.service';
 
@@ -44,6 +46,8 @@ export class OrderService {
     private readonly customerRepository: CustomerRepository,
     private readonly notificationEventService: NotificationEventService,
     private readonly loyaltyProcessor: LoyaltyProcessorService,
+    private readonly orderStatusTransitionService: OrderStatusTransitionService,
+    private readonly orderAuditService: OrderAuditService,
   ) {}
 
   async findAll(
@@ -186,6 +190,13 @@ export class OrderService {
 
     this.logger.log(`Order created: ${order.id} (${order.invoiceNumber})`);
 
+    await this.orderAuditService.log({
+      employeeId,
+      action: 'order_created',
+      referenceId: order.id,
+      description: `Order ${order.invoiceNumber} created`,
+    });
+
     await this.notificationEventService.publish({
       templateCode: NOTIFICATION_EVENTS.ORDER_CREATED,
       type: API_NOTIFICATION_TYPES.ORDER,
@@ -290,9 +301,10 @@ export class OrderService {
   ): Promise<ApiSuccessResponse<OrderDetail>> {
     const existing = await this.getEditableOrder(id);
 
-    if (existing.orderStatus === dto.status) {
-      throw new BadRequestException('Order is already in the requested status');
-    }
+    this.orderStatusTransitionService.validateManualTransition(
+      existing.orderStatus,
+      dto.status,
+    );
 
     if (
       dto.status === OrderStatus.COMPLETED &&
@@ -314,6 +326,13 @@ export class OrderService {
     if (dto.status === OrderStatus.COMPLETED) {
       await this.loyaltyProcessor.processOrderCompleted(order.id, employeeId);
     }
+
+    await this.orderAuditService.log({
+      employeeId,
+      action: 'status_transition',
+      referenceId: order.id,
+      description: `Order status ${existing.orderStatus} -> ${dto.status}`,
+    });
 
     return {
       success: true,
@@ -349,6 +368,13 @@ export class OrderService {
     );
 
     this.logger.log(`Order cancelled: ${order.id} (${order.invoiceNumber})`);
+
+    await this.orderAuditService.log({
+      employeeId,
+      action: 'order_cancelled',
+      referenceId: order.id,
+      description: dto.reason.trim(),
+    });
 
     await this.notificationEventService.publish({
       templateCode: NOTIFICATION_EVENTS.ORDER_CANCELLED,

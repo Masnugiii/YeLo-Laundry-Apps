@@ -1,26 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
 import 'package:yelo_laundry_erp/features/orders/data/dummy_unpaid_orders.dart';
+import 'package:yelo_laundry_erp/features/orders/data/order_view_mappers.dart';
 import 'package:yelo_laundry_erp/features/orders/models/unpaid_order.dart';
 import 'package:yelo_laundry_erp/features/orders/presentation/widgets/unpaid_order_card.dart';
 import 'package:yelo_laundry_erp/features/orders/presentation/widgets/unpaid_orders_summary_grid.dart';
+import 'package:yelo_laundry_erp/features/orders/providers/order_query_providers.dart';
+import 'package:yelo_laundry_erp/shared/widgets/api_state_widgets.dart';
 import 'package:yelo_laundry_erp/shared/widgets/selectable_chip.dart';
 
-class UnpaidOrdersScreen extends StatefulWidget {
+class UnpaidOrdersScreen extends ConsumerStatefulWidget {
   const UnpaidOrdersScreen({super.key});
 
   @override
-  State<UnpaidOrdersScreen> createState() => _UnpaidOrdersScreenState();
+  ConsumerState<UnpaidOrdersScreen> createState() => _UnpaidOrdersScreenState();
 }
 
-class _UnpaidOrdersScreenState extends State<UnpaidOrdersScreen> {
+class _UnpaidOrdersScreenState extends ConsumerState<UnpaidOrdersScreen> {
   static const _filters = UnpaidOrderFilter.values;
 
   final _searchController = TextEditingController();
-  final _orders = dummyUnpaidOrders();
 
   UnpaidOrderFilter _selectedFilter = UnpaidOrderFilter.semua;
   UnpaidOrderSort _selectedSort = UnpaidOrderSort.tanggalMasuk;
@@ -32,12 +35,12 @@ class _UnpaidOrdersScreenState extends State<UnpaidOrdersScreen> {
     super.dispose();
   }
 
-  List<UnpaidOrder> get _activeOrders =>
-      _orders.where((order) => !_paidOrderIds.contains(order.id)).toList();
+  List<UnpaidOrder> _activeOrders(List<UnpaidOrder> orders) =>
+      orders.where((order) => !_paidOrderIds.contains(order.id)).toList();
 
-  List<UnpaidOrder> get _visibleOrders {
+  List<UnpaidOrder> _visibleOrders(List<UnpaidOrder> orders) {
     final filtered = filterUnpaidOrders(
-      orders: _activeOrders,
+      orders: _activeOrders(orders),
       query: _searchController.text,
       filter: _selectedFilter,
     );
@@ -115,8 +118,7 @@ class _UnpaidOrdersScreenState extends State<UnpaidOrdersScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final visibleOrders = _visibleOrders;
-    final summary = computeUnpaidOrdersSummary(_activeOrders);
+    final ordersAsync = ref.watch(unpaidOrdersProvider);
 
     return Scaffold(
       backgroundColor: AppColors.dashboardBackground,
@@ -141,125 +143,139 @@ class _UnpaidOrdersScreenState extends State<UnpaidOrdersScreen> {
           ),
         ],
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: visibleOrders.isEmpty
-                ? _EmptyState(hasActiveOrders: _activeOrders.isNotEmpty)
-                : ListView(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.s20,
-                      AppSpacing.s20,
-                      AppSpacing.s20,
-                      AppSpacing.s32,
-                    ),
-                    children: [
-                      Text(
-                        'Daftar order yang belum melakukan pelunasan pembayaran.',
-                        style: GoogleFonts.poppins(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.textSecondary,
-                          height: 1.4,
+      body: ordersAsync.when(
+        loading: () => const ApiLoadingView(),
+        error: (error, _) => ApiErrorView(
+          message: messageFromError(error),
+          onRetry: () => ref.invalidate(unpaidOrdersProvider),
+        ),
+        data: (incomingOrders) {
+          final orders = incomingOrders.map(toUnpaidOrder).toList();
+          final visibleOrders = _visibleOrders(orders);
+          final summary = computeUnpaidOrdersSummary(_activeOrders(orders));
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: visibleOrders.isEmpty
+                    ? _EmptyState(hasActiveOrders: _activeOrders(orders).isNotEmpty)
+                    : ListView(
+                        padding: const EdgeInsets.fromLTRB(
+                          AppSpacing.s20,
+                          AppSpacing.s20,
+                          AppSpacing.s20,
+                          AppSpacing.s32,
                         ),
-                      ),
-                      const SizedBox(height: AppSpacing.s16),
-                      UnpaidOrdersSummaryGrid(summary: summary),
-                      const SizedBox(height: AppSpacing.s20),
-                      TextField(
-                        controller: _searchController,
-                        onChanged: (_) => setState(() {}),
-                        style: GoogleFonts.poppins(
-                          fontSize: 15,
-                          color: AppColors.textPrimary,
-                        ),
-                        decoration: InputDecoration(
-                          hintText:
-                              'Cari nama customer, nomor antrian, atau WhatsApp',
-                          hintStyle: GoogleFonts.poppins(
-                            fontSize: 14,
-                            color: AppColors.textSecondary,
-                          ),
-                          prefixIcon: const Icon(
-                            Icons.search,
-                            color: AppColors.primary,
-                          ),
-                          filled: true,
-                          fillColor: AppColors.surface,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.s16,
-                            vertical: AppSpacing.s16,
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(20),
-                            borderSide: const BorderSide(
-                              color: AppColors.primary,
+                        children: [
+                          Text(
+                            'Daftar order yang belum melakukan pelunasan pembayaran.',
+                            style: GoogleFonts.poppins(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.textSecondary,
+                              height: 1.4,
                             ),
                           ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(20),
-                            borderSide: const BorderSide(
-                              color: AppColors.primary,
-                              width: 2,
+                          const SizedBox(height: AppSpacing.s16),
+                          UnpaidOrdersSummaryGrid(summary: summary),
+                          const SizedBox(height: AppSpacing.s20),
+                          TextField(
+                            controller: _searchController,
+                            onChanged: (_) => setState(() {}),
+                            style: GoogleFonts.poppins(
+                              fontSize: 15,
+                              color: AppColors.textPrimary,
                             ),
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(20),
-                            borderSide: const BorderSide(
-                              color: AppColors.primary,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.s16),
-                      SizedBox(
-                        height: 44,
-                        child: ListView.separated(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: _filters.length,
-                          separatorBuilder: (_, _) =>
-                              const SizedBox(width: AppSpacing.s8),
-                          itemBuilder: (context, index) {
-                            final filter = _filters[index];
-                            return SelectableChip(
-                              label: filter.label,
-                              isSelected: filter == _selectedFilter,
-                              onTap: () => setState(
-                                () => _selectedFilter = filter,
+                            decoration: InputDecoration(
+                              hintText:
+                                  'Cari nama customer, nomor antrian, atau WhatsApp',
+                              hintStyle: GoogleFonts.poppins(
+                                fontSize: 14,
+                                color: AppColors.textSecondary,
                               ),
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.s8),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: Text(
-                          'Urutkan: ${_selectedSort.label}',
-                          style: GoogleFonts.poppins(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.textSecondary,
+                              prefixIcon: const Icon(
+                                Icons.search,
+                                color: AppColors.primary,
+                              ),
+                              filled: true,
+                              fillColor: AppColors.surface,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: AppSpacing.s16,
+                                vertical: AppSpacing.s16,
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(20),
+                                borderSide: const BorderSide(
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(20),
+                                borderSide: const BorderSide(
+                                  color: AppColors.primary,
+                                  width: 2,
+                                ),
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(20),
+                                borderSide: const BorderSide(
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.s16),
-                      ...visibleOrders.map(
-                        (order) => Padding(
-                          padding: const EdgeInsets.only(
-                            bottom: AppSpacing.s16,
+                          const SizedBox(height: AppSpacing.s16),
+                          SizedBox(
+                            height: 44,
+                            child: ListView.separated(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: _filters.length,
+                              separatorBuilder: (_, _) =>
+                                  const SizedBox(width: AppSpacing.s8),
+                              itemBuilder: (context, index) {
+                                final filter = _filters[index];
+                                return SelectableChip(
+                                  label: filter.label,
+                                  isSelected: filter == _selectedFilter,
+                                  onTap: () => setState(
+                                    () => _selectedFilter = filter,
+                                  ),
+                                );
+                              },
+                            ),
                           ),
-                          child: UnpaidOrderCard(
-                            order: order,
-                            onPaymentConfirmed: () => _markOrderPaid(order.id),
+                          const SizedBox(height: AppSpacing.s8),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: Text(
+                              'Urutkan: ${_selectedSort.label}',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
                           ),
-                        ),
+                          const SizedBox(height: AppSpacing.s16),
+                          ...visibleOrders.map(
+                            (order) => Padding(
+                              padding: const EdgeInsets.only(
+                                bottom: AppSpacing.s16,
+                              ),
+                              child: UnpaidOrderCard(
+                                order: order,
+                                onPaymentConfirmed: () =>
+                                    _markOrderPaid(order.id),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-          ),
-        ],
+              ),
+            ],
+          );
+        },
       ),
     );
   }

@@ -8,6 +8,7 @@ import 'package:yelo_laundry_erp/features/binatu/models/binatu_ironing_status.da
 import 'package:yelo_laundry_erp/features/binatu/presentation/widgets/binatu_ironing_order_card.dart';
 import 'package:yelo_laundry_erp/features/binatu/providers/binatu_dashboard_badge_provider.dart';
 import 'package:yelo_laundry_erp/features/binatu/providers/binatu_order_provider.dart';
+import 'package:yelo_laundry_erp/shared/widgets/api_state_widgets.dart';
 import 'package:yelo_laundry_erp/shared/widgets/selectable_chip.dart';
 
 class BinatuIroningQueueScreen extends ConsumerStatefulWidget {
@@ -36,13 +37,8 @@ class _BinatuIroningQueueScreenState
 
   @override
   Widget build(BuildContext context) {
-    final orders = ref.watch(binatuOrderProvider);
+    final ordersAsync = ref.watch(binatuOrderProvider);
     final filter = ref.watch(binatuQueueFilterProvider);
-
-    final filteredOrders = orders
-        .where((order) => filter.matches(order.ironingStatus))
-        .toList()
-      ..sort((a, b) => a.deadline.compareTo(b.deadline));
 
     return Scaffold(
       backgroundColor: AppColors.dashboardBackground,
@@ -90,8 +86,20 @@ class _BinatuIroningQueueScreenState
             ),
           ),
           Expanded(
-            child: filteredOrders.isEmpty
-                ? Center(
+            child: ordersAsync.when(
+              loading: () => const ApiLoadingView(),
+              error: (error, _) => ApiErrorView(
+                message: messageFromError(error),
+                onRetry: () => ref.invalidate(binatuOrderProvider),
+              ),
+              data: (orders) {
+                final filteredOrders = orders
+                    .where((order) => filter.matches(order.ironingStatus))
+                    .toList()
+                  ..sort((a, b) => a.deadline.compareTo(b.deadline));
+
+                if (filteredOrders.isEmpty) {
+                  return Center(
                     child: Text(
                       'Tidak ada order pada kategori ini.',
                       style: GoogleFonts.poppins(
@@ -100,8 +108,14 @@ class _BinatuIroningQueueScreenState
                         color: AppColors.textSecondary,
                       ),
                     ),
-                  )
-                : ListView.separated(
+                  );
+                }
+
+                return RefreshIndicator(
+                  onRefresh: () =>
+                      ref.read(binatuOrderProvider.notifier).refresh(),
+                  child: ListView.separated(
+                    physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(
                       AppSpacing.s20,
                       AppSpacing.s8,
@@ -117,6 +131,9 @@ class _BinatuIroningQueueScreenState
                       );
                     },
                   ),
+                );
+              },
+            ),
           ),
         ],
       ),

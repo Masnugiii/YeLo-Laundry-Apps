@@ -1,203 +1,205 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_shadows.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
-import 'package:yelo_laundry_erp/features/customer/data/dummy_customers.dart';
 import 'package:yelo_laundry_erp/features/customer/models/customer_order_history.dart';
 import 'package:yelo_laundry_erp/features/customer/presentation/widgets/customer_fab.dart';
+import 'package:yelo_laundry_erp/features/customer/providers/customer_detail_provider.dart';
 import 'package:yelo_laundry_erp/features/new_order/utils/currency_formatter.dart';
 import 'package:yelo_laundry_erp/features/points/models/loyalty_class.dart';
 import 'package:yelo_laundry_erp/features/points/presentation/widgets/loyalty_badge.dart';
 import 'package:yelo_laundry_erp/features/points/presentation/widgets/point_rewards_card.dart';
 import 'package:yelo_laundry_erp/features/wallet/presentation/widgets/wallet_deduction_bottom_sheet.dart';
 import 'package:yelo_laundry_erp/features/wallet/presentation/widgets/wallet_top_up_bottom_sheet.dart';
+import 'package:yelo_laundry_erp/shared/widgets/api_state_widgets.dart';
 
-class CustomerDetailScreen extends StatelessWidget {
+class CustomerDetailScreen extends ConsumerWidget {
   const CustomerDetailScreen({super.key, required this.customerId});
 
   final String customerId;
 
   @override
-  Widget build(BuildContext context) {
-    final profile = findCustomerProfile(customerId);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profileAsync = ref.watch(customerDetailProvider(customerId));
 
-    if (profile == null) {
-      return Scaffold(
+    return profileAsync.when(
+      loading: () => Scaffold(
         backgroundColor: AppColors.dashboardBackground,
         floatingActionButton: const CustomerFab(),
         floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
         appBar: _buildAppBar(context),
-        body: Center(
-          child: Text(
-            'Pelanggan tidak ditemukan',
-            style: GoogleFonts.poppins(
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-              color: AppColors.textSecondary,
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Scaffold(
-      backgroundColor: AppColors.dashboardBackground,
-      floatingActionButton: const CustomerFab(),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      appBar: _buildAppBar(
-        context,
-        loyaltyClass: loyaltyClassFromPoints(profile.customer.points),
+        body: const ApiLoadingView(),
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.s20,
-          AppSpacing.s20,
-          AppSpacing.s20,
-          AppSpacing.s32,
+      error: (error, _) => Scaffold(
+        backgroundColor: AppColors.dashboardBackground,
+        floatingActionButton: const CustomerFab(),
+        floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+        appBar: _buildAppBar(context),
+        body: ApiErrorView(
+          message: messageFromError(error),
+          onRetry: () => ref.invalidate(customerDetailProvider(customerId)),
         ),
-        children: [
-          _SectionCard(
-            title: 'Profile',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _DetailRow(
-                  label: 'Customer Name',
-                  value: profile.customer.name,
-                ),
-                _DetailRow(
-                  label: 'Phone Number',
-                  value: profile.customer.phone,
-                ),
-                _DetailRow(
-                  label: 'Occupation',
-                  value: profile.customer.occupation ?? '-',
-                ),
-                _DetailRow(
-                  label: 'Home Address',
-                  value: profile.customer.address ?? '-',
-                  multiline: true,
-                  showDivider: false,
-                ),
-              ],
-            ),
+      ),
+      data: (profile) => Scaffold(
+        backgroundColor: AppColors.dashboardBackground,
+        floatingActionButton: const CustomerFab(),
+        floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+        appBar: _buildAppBar(
+          context,
+          loyaltyClass: loyaltyClassFromPoints(profile.customer.points),
+        ),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.s20,
+            AppSpacing.s20,
+            AppSpacing.s20,
+            AppSpacing.s32,
           ),
-          const SizedBox(height: AppSpacing.s16),
-          _SectionCard(
-            title: 'Dompet Yelo',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  formatRupiah(profile.customer.walletBalance),
-                  style: GoogleFonts.poppins(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.primary,
+          children: [
+            _SectionCard(
+              title: 'Profile',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _DetailRow(
+                    label: 'Customer Name',
+                    value: profile.customer.name,
                   ),
-                ),
-                const SizedBox(height: AppSpacing.s16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _ActionButton(
-                        label: 'Tambah Saldo',
-                        backgroundColor: AppColors.primary,
-                        textColor: AppColors.onPrimary,
-                        onPressed: () => showWalletTopUpBottomSheet(
-                          context,
-                          currentBalance: profile.customer.walletBalance,
-                          customerId: profile.customer.id,
-                          customerName: profile.customer.name,
+                  _DetailRow(
+                    label: 'Phone Number',
+                    value: profile.customer.phone,
+                  ),
+                  _DetailRow(
+                    label: 'Occupation',
+                    value: profile.customer.occupation ?? '-',
+                  ),
+                  _DetailRow(
+                    label: 'Home Address',
+                    value: profile.customer.address ?? '-',
+                    multiline: true,
+                    showDivider: false,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.s16),
+            _SectionCard(
+              title: 'Dompet Yelo',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    formatRupiah(profile.walletBalance),
+                    style: GoogleFonts.poppins(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.s16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _ActionButton(
+                          label: 'Tambah Saldo',
+                          backgroundColor: AppColors.primary,
+                          textColor: AppColors.onPrimary,
+                          onPressed: () => showWalletTopUpBottomSheet(
+                            context,
+                            currentBalance: profile.walletBalance,
+                            customerId: profile.customer.id,
+                            customerName: profile.customer.name,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: AppSpacing.s8),
-                    Expanded(
-                      child: _ActionButton(
-                        label: 'Kurangi Saldo',
-                        backgroundColor: AppColors.surface,
-                        textColor: AppColors.primary,
-                        borderColor: AppColors.primary,
-                        onPressed: () => showWalletDeductionBottomSheet(
-                          context,
-                          currentBalance: profile.customer.walletBalance,
-                          customerId: profile.customer.id,
-                          customerName: profile.customer.name,
+                      const SizedBox(width: AppSpacing.s8),
+                      Expanded(
+                        child: _ActionButton(
+                          label: 'Kurangi Saldo',
+                          backgroundColor: AppColors.surface,
+                          textColor: AppColors.primary,
+                          borderColor: AppColors.primary,
+                          onPressed: () => showWalletDeductionBottomSheet(
+                            context,
+                            currentBalance: profile.walletBalance,
+                            customerId: profile.customer.id,
+                            customerName: profile.customer.name,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.s8),
-                SizedBox(
-                  width: double.infinity,
-                  child: _ActionButton(
-                    label: 'Riwayat Deposit',
-                    backgroundColor: AppColors.accent,
-                    textColor: AppColors.primary,
-                    onPressed: () => context.push(
-                      '/wallet-history?customerId=${profile.customer.id}',
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.s8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: _ActionButton(
+                      label: 'Riwayat Deposit',
+                      backgroundColor: AppColors.accent,
+                      textColor: AppColors.primary,
+                      onPressed: () => context.push(
+                        '/wallet-history?customerId=${profile.customer.id}',
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: AppSpacing.s16),
-          PointRewardsCard(
-            points: profile.customer.points,
-            onHistoryPressed: () => context.push(
-              '/customer/point-history?customerId=${profile.customer.id}',
+            const SizedBox(height: AppSpacing.s16),
+            PointRewardsCard(
+              points: profile.customer.points,
+              onHistoryPressed: () => context.push(
+                '/customer/point-history?customerId=${profile.customer.id}',
+              ),
             ),
-          ),
-          const SizedBox(height: AppSpacing.s16),
-          _SectionCard(
-            title: 'Customer Statistics',
-            child: GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: AppSpacing.s12,
-              crossAxisSpacing: AppSpacing.s12,
-              childAspectRatio: 1.5,
-              children: [
-                _StatTile(
-                  label: 'Total Order',
-                  value: profile.statistics.totalOrders.toString(),
-                ),
-                _StatTile(
-                  label: 'Last Order',
-                  value: profile.statistics.lastOrder,
-                ),
-                _StatTile(
-                  label: 'Total Spending',
-                  value: formatRupiah(profile.statistics.totalSpending),
-                ),
-                _StatTile(
-                  label: 'Average Order Value',
-                  value: formatRupiah(profile.statistics.averageOrderValue),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: AppSpacing.s16),
-          _SectionCard(
-            title: 'Order History',
-            child: Column(
-              children: [
-                for (var i = 0; i < profile.recentOrders.length; i++)
-                  _OrderHistoryTile(
-                    order: profile.recentOrders[i],
-                    showDivider: i < profile.recentOrders.length - 1,
+            const SizedBox(height: AppSpacing.s16),
+            _SectionCard(
+              title: 'Customer Statistics',
+              child: GridView.count(
+                crossAxisCount: 2,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                mainAxisSpacing: AppSpacing.s12,
+                crossAxisSpacing: AppSpacing.s12,
+                childAspectRatio: 1.5,
+                children: [
+                  _StatTile(
+                    label: 'Total Order',
+                    value: profile.statistics.totalOrders.toString(),
                   ),
-              ],
+                  _StatTile(
+                    label: 'Last Order',
+                    value: profile.statistics.lastOrder,
+                  ),
+                  _StatTile(
+                    label: 'Total Spending',
+                    value: formatRupiah(profile.statistics.totalSpending),
+                  ),
+                  _StatTile(
+                    label: 'Average Order Value',
+                    value: formatRupiah(profile.statistics.averageOrderValue),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: AppSpacing.s16),
+            _SectionCard(
+              title: 'Order History',
+              child: Column(
+                children: [
+                  for (var i = 0; i < profile.recentOrders.length; i++)
+                    _OrderHistoryTile(
+                      order: profile.recentOrders[i],
+                      showDivider: i < profile.recentOrders.length - 1,
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

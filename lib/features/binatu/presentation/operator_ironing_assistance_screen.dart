@@ -8,6 +8,7 @@ import 'package:yelo_laundry_erp/features/binatu/models/binatu_ironing_status.da
 import 'package:yelo_laundry_erp/features/binatu/presentation/widgets/binatu_ironing_order_card.dart';
 import 'package:yelo_laundry_erp/features/binatu/providers/binatu_order_provider.dart';
 import 'package:yelo_laundry_erp/features/binatu/providers/ironing_queue_priority_provider.dart';
+import 'package:yelo_laundry_erp/shared/widgets/api_state_widgets.dart';
 
 /// Operator-facing ironing queue for assistance-only jobs.
 class OperatorIroningAssistanceScreen extends ConsumerWidget {
@@ -21,26 +22,8 @@ class OperatorIroningAssistanceScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(ironingQueuePriorityProvider);
-    final orders = ref.watch(binatuOrderProvider);
+    final ordersAsync = ref.watch(binatuOrderProvider);
     final prioritySettings = ref.watch(ironingQueuePriorityProvider);
-
-    final assistanceOrders = orders
-        .where(
-          (order) =>
-              order.ironingStatus ==
-                  BinatuIroningStatus.waitingForOperatorAssistance ||
-              order.ironingStatus == BinatuIroningStatus.waitingForBinatu,
-        )
-        .toList()
-      ..sort((a, b) => a.deadline.compareTo(b.deadline));
-
-    final waitingForAssistance = assistanceOrders
-        .where(
-          (order) =>
-              order.ironingStatus ==
-              BinatuIroningStatus.waitingForOperatorAssistance,
-        )
-        .length;
 
     return Scaffold(
       backgroundColor: AppColors.dashboardBackground,
@@ -59,68 +42,96 @@ class OperatorIroningAssistanceScreen extends ConsumerWidget {
           ),
         ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.s20,
-          AppSpacing.s20,
-          AppSpacing.s20,
-          AppSpacing.s32,
+      body: ordersAsync.when(
+        loading: () => const ApiLoadingView(),
+        error: (error, _) => ApiErrorView(
+          message: messageFromError(error),
+          onRetry: () => ref.invalidate(binatuOrderProvider),
         ),
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(AppSpacing.s16),
-            decoration: BoxDecoration(
-              color: AppColors.accent.withValues(alpha: 0.22),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: AppColors.accent.withValues(alpha: 0.45),
-              ),
+        data: (orders) {
+          final assistanceOrders = orders
+              .where(
+                (order) =>
+                    order.ironingStatus ==
+                        BinatuIroningStatus.waitingForOperatorAssistance ||
+                    order.ironingStatus == BinatuIroningStatus.waitingForBinatu,
+              )
+              .toList()
+            ..sort((a, b) => a.deadline.compareTo(b.deadline));
+
+          final waitingForAssistance = assistanceOrders
+              .where(
+                (order) =>
+                    order.ironingStatus ==
+                    BinatuIroningStatus.waitingForOperatorAssistance,
+              )
+              .length;
+
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.s20,
+              AppSpacing.s20,
+              AppSpacing.s20,
+              AppSpacing.s32,
             ),
-            child: Text(
-              'Binatu memiliki prioritas pertama selama '
-              '${prioritySettings.waitingTimeMinutes} menit. '
-              'Operator hanya dapat membantu setelah waktu tunggu berakhir.',
-              style: GoogleFonts.poppins(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: AppColors.primary,
-                height: 1.45,
-              ),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.s16),
-          Text(
-            '$waitingForAssistance pekerjaan siap dibantu',
-            style: GoogleFonts.poppins(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.s16),
-          if (assistanceOrders.isEmpty)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: AppSpacing.s32),
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(AppSpacing.s16),
+                decoration: BoxDecoration(
+                  color: AppColors.accent.withValues(alpha: 0.22),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: AppColors.accent.withValues(alpha: 0.45),
+                  ),
+                ),
                 child: Text(
-                  'Belum ada pekerjaan setrika yang menunggu bantuan.',
-                  textAlign: TextAlign.center,
+                  'Binatu memiliki prioritas pertama selama '
+                  '${prioritySettings.waitingTimeMinutes} menit. '
+                  'Operator hanya dapat membantu setelah waktu tunggu berakhir.',
                   style: GoogleFonts.poppins(
-                    fontSize: 14,
+                    fontSize: 13,
                     fontWeight: FontWeight.w500,
-                    color: AppColors.textSecondary,
-                    height: 1.5,
+                    color: AppColors.primary,
+                    height: 1.45,
                   ),
                 ),
               ),
-            )
-          else
-            for (var i = 0; i < assistanceOrders.length; i++) ...[
-              if (i > 0) const SizedBox(height: AppSpacing.s12),
-              BinatuIroningOrderCard(order: assistanceOrders[i]),
+              const SizedBox(height: AppSpacing.s16),
+              Text(
+                '$waitingForAssistance pekerjaan siap dibantu',
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.s16),
+              if (assistanceOrders.isEmpty)
+                Center(
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(vertical: AppSpacing.s32),
+                    child: Text(
+                      'Belum ada pekerjaan setrika yang menunggu bantuan.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.textSecondary,
+                        height: 1.5,
+                      ),
+                    ),
+                  ),
+                )
+              else
+                for (var i = 0; i < assistanceOrders.length; i++) ...[
+                  if (i > 0) const SizedBox(height: AppSpacing.s12),
+                  BinatuIroningOrderCard(order: assistanceOrders[i]),
+                ],
             ],
-        ],
+          );
+        },
       ),
     );
   }

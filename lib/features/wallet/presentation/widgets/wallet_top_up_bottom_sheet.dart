@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
+import 'package:yelo_laundry_erp/core/providers/core_providers.dart';
 import 'package:yelo_laundry_erp/features/wallet/data/dummy_wallet_admins.dart';
 import 'package:yelo_laundry_erp/features/wallet/models/wallet_admin.dart';
 import 'package:yelo_laundry_erp/features/wallet/models/wallet_top_up.dart';
 import 'package:yelo_laundry_erp/features/wallet/models/wallet_top_up_confirmation.dart';
+import 'package:yelo_laundry_erp/features/wallet/providers/wallet_providers.dart';
 import 'package:yelo_laundry_erp/features/wallet/presentation/widgets/wallet_admin_dropdown.dart';
 import 'package:yelo_laundry_erp/features/wallet/presentation/widgets/wallet_sheet_widgets.dart';
 import 'package:yelo_laundry_erp/shared/widgets/selectable_chip.dart';
@@ -35,7 +38,7 @@ void showWalletTopUpBottomSheet(
   );
 }
 
-class _WalletTopUpBottomSheet extends StatefulWidget {
+class _WalletTopUpBottomSheet extends ConsumerStatefulWidget {
   const _WalletTopUpBottomSheet({
     required this.currentBalance,
     required this.customerId,
@@ -47,10 +50,12 @@ class _WalletTopUpBottomSheet extends StatefulWidget {
   final String customerName;
 
   @override
-  State<_WalletTopUpBottomSheet> createState() => _WalletTopUpBottomSheetState();
+  ConsumerState<_WalletTopUpBottomSheet> createState() =>
+      _WalletTopUpBottomSheetState();
 }
 
-class _WalletTopUpBottomSheetState extends State<_WalletTopUpBottomSheet> {
+class _WalletTopUpBottomSheetState
+    extends ConsumerState<_WalletTopUpBottomSheet> {
   final _amountController = TextEditingController();
   WalletTopUpPaymentMethod _paymentMethod = WalletTopUpPaymentMethod.cash;
   WalletAdmin _selectedAdmin = dummyCurrentTopUpAdmin;
@@ -61,8 +66,33 @@ class _WalletTopUpBottomSheetState extends State<_WalletTopUpBottomSheet> {
     super.dispose();
   }
 
-  void _continue() {
+  Future<void> _continue() async {
     final amount = int.tryParse(_amountController.text) ?? 0;
+    if (amount <= 0) return;
+
+    try {
+      await ref.read(walletRepositoryProvider).topUp(
+            widget.customerId,
+            amount: amount.toDouble(),
+            notes: 'Top up via ${_paymentMethod.label}',
+          );
+      ref.invalidate(customerWalletProvider(widget.customerId));
+      ref.invalidate(walletTransactionsProvider(widget.customerId));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Gagal memproses top up.',
+            style: GoogleFonts.poppins(fontSize: 13),
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+
     final confirmation = WalletTopUpConfirmation(
       customerId: widget.customerId,
       customerName: widget.customerName,
@@ -74,7 +104,6 @@ class _WalletTopUpBottomSheetState extends State<_WalletTopUpBottomSheet> {
       dateTime: DateTime.now(),
     );
 
-    // Dummy audit record foundation — no persistence yet.
     final _ = WalletTopUpRecord(
       adminName: _selectedAdmin.name,
       paymentMethod: _paymentMethod,

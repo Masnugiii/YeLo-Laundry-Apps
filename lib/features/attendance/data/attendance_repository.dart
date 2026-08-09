@@ -20,9 +20,10 @@ class AttendanceRepository {
     );
   }
 
-  Future<Map<String, dynamic>> checkOut(String attendanceId) async {
+  Future<Map<String, dynamic>> checkOut(Map<String, dynamic> payload) async {
     return _apiClient.post<Map<String, dynamic>>(
-      '/attendance/$attendanceId/check-out',
+      '/attendance/check-out',
+      data: payload,
       parser: (json) => json as Map<String, dynamic>,
     );
   }

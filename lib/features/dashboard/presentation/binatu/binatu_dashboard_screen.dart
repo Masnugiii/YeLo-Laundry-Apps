@@ -11,6 +11,7 @@ import 'package:yelo_laundry_erp/features/binatu/presentation/binatu_ironing_que
 import 'package:yelo_laundry_erp/features/binatu/presentation/binatu_settings_screen.dart';
 import 'package:yelo_laundry_erp/features/binatu/providers/binatu_dashboard_badge_provider.dart';
 import 'package:yelo_laundry_erp/features/binatu/providers/binatu_order_provider.dart';
+import 'package:yelo_laundry_erp/features/dashboard/providers/operational_summary_provider.dart';
 import 'package:yelo_laundry_erp/features/dashboard/presentation/owner/widgets/pos_menu_card.dart';
 import 'package:yelo_laundry_erp/features/dashboard/presentation/owner/widgets/pos_section_title.dart';
 import 'package:yelo_laundry_erp/features/dashboard/presentation/widgets/role_dashboard_shell.dart';
@@ -57,7 +58,10 @@ class _BinatuHomePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(binatuOrderProvider);
-    final summary = ref.read(binatuOrderProvider.notifier).dashboardSummary();
+    final summaryAsync = ref.watch(operationalSummaryProvider);
+    final summary = ref.read(binatuOrderProvider.notifier).dashboardSummary(
+          laundry: summaryAsync.value?.laundry,
+        );
     final badgeState = ref.watch(binatuDashboardBadgeProvider);
 
     return Column(

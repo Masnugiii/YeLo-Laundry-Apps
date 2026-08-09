@@ -9,7 +9,9 @@ import type {
   ExpenseListParams,
   FinanceDashboard,
   FinanceReportParams,
+  Payment,
   PaymentHistorySummary,
+  PaymentListParams,
   ProfitLossReport,
   RevenueListItem,
   RevenueListParams,
@@ -110,6 +112,17 @@ export function usePaymentHistory(params: FinanceReportParams) {
     queryFn: () =>
       apiGet<PaymentHistorySummary>(
         "/finance/payment-history",
+        params as Record<string, unknown>,
+      ),
+  });
+}
+
+export function usePayments(params: PaymentListParams) {
+  return useQuery({
+    queryKey: [FINANCE_QUERY_KEY, "payments", params],
+    queryFn: () =>
+      apiGet<Paginated<Payment>>(
+        "/payments",
         params as Record<string, unknown>,
       ),
   });

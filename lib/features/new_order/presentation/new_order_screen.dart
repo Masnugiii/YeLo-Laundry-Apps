@@ -1,10 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
+import 'package:yelo_laundry_erp/core/network/api_exception.dart';
+import 'package:yelo_laundry_erp/core/providers/core_providers.dart';
+import 'package:yelo_laundry_erp/core/role/role.dart';
+import 'package:yelo_laundry_erp/core/session/session_provider.dart';
+import 'package:yelo_laundry_erp/features/catalog/providers/catalog_provider.dart';
 import 'package:yelo_laundry_erp/features/customer/models/customer.dart';
+import 'package:yelo_laundry_erp/features/dashboard/providers/dashboard_shell_tab_provider.dart';
 import 'package:yelo_laundry_erp/features/new_order/models/laundry_service.dart';
 import 'package:yelo_laundry_erp/features/new_order/models/new_order_payment_method.dart';
 import 'package:yelo_laundry_erp/features/new_order/models/selected_order_service.dart';
@@ -14,20 +21,22 @@ import 'package:yelo_laundry_erp/features/new_order/presentation/widgets/new_ord
 import 'package:yelo_laundry_erp/features/new_order/presentation/widgets/order_summary_section.dart';
 import 'package:yelo_laundry_erp/features/new_order/presentation/widgets/selected_service_form_card.dart';
 import 'package:yelo_laundry_erp/features/new_order/presentation/widgets/service_bottom_sheet.dart';
+import 'package:yelo_laundry_erp/features/orders/providers/incoming_order_provider.dart';
 import 'package:yelo_laundry_erp/shared/widgets/selectable_chip.dart';
 
-class NewOrderScreen extends StatefulWidget {
+class NewOrderScreen extends ConsumerStatefulWidget {
   const NewOrderScreen({super.key});
 
   @override
-  State<NewOrderScreen> createState() => _NewOrderScreenState();
+  ConsumerState<NewOrderScreen> createState() => _NewOrderScreenState();
 }
 
-class _NewOrderScreenState extends State<NewOrderScreen> {
+class _NewOrderScreenState extends ConsumerState<NewOrderScreen> {
   Customer? _selectedCustomer;
   final List<SelectedOrderService> _selectedServices = [];
   NewOrderPaymentMethod _paymentMethod = NewOrderPaymentMethod.cash;
   bool _showWhatsAppShare = false;
+  bool _isSaving = false;
 
   static const _dummyDiscount = 0;
   static const _dummyTax = 5000;
@@ -66,15 +75,110 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
     setState(() {
       if (weightKg != null) {
         item.form = item.form.copyWith(weightKg: weightKg);
+        final parsed = item.form.parsedWeightKg;
+        if (parsed != null) {
+          item.quantity = parsed;
+        }
       }
       if (itemQuantity != null) {
         item.form = item.form.copyWith(itemQuantity: itemQuantity);
+        final parsed = item.form.parsedItemQuantity;
+        if (parsed != null) {
+          item.quantity = parsed.toDouble();
+        }
       }
     });
   }
 
+  Future<void> _saveOrder() async {
+    if (_isSaving) return;
+
+    if (_selectedCustomer == null) {
+      _showSnackBar('Pilih pelanggan terlebih dahulu.', isError: true);
+      return;
+    }
+
+    if (_selectedServices.isEmpty) {
+      _showSnackBar('Tambahkan minimal satu layanan.', isError: true);
+      return;
+    }
+
+    final items = <Map<String, dynamic>>[];
+    for (final selected in _selectedServices) {
+      final form = selected.form;
+      final quantity = form.service.unit == ServiceUnit.perKg
+          ? form.parsedWeightKg
+          : form.parsedItemQuantity?.toDouble();
+
+      if (quantity == null || quantity <= 0) {
+        _showSnackBar(
+          'Lengkapi berat atau jumlah item untuk semua layanan.',
+          isError: true,
+        );
+        return;
+      }
+
+      items.add({
+        'serviceId': form.service.id,
+        'quantity': quantity,
+        if (form.service.unit == ServiceUnit.perKg && form.parsedWeightKg != null)
+          'weight': form.parsedWeightKg,
+      });
+    }
+
+    setState(() => _isSaving = true);
+
+    try {
+      await ref.read(orderRepositoryProvider).createOrder({
+        'customerId': _selectedCustomer!.id,
+        'estimatedFinishDate':
+            DateTime.now().add(const Duration(days: 2)).toUtc().toIso8601String(),
+        'items': items,
+        'taxAmount': _dummyTax,
+      });
+
+      ref.invalidate(incomingOrderProvider);
+
+      if (!mounted) return;
+
+      _showSnackBar('Order berhasil disimpan.');
+      ref
+          .read(dashboardShellTabProvider.notifier)
+          .setTab(incomingOrdersDashboardTabIndex);
+      context.go(ref.read(sessionProvider).role.dashboardRoute);
+    } on ApiException catch (error) {
+      if (mounted) {
+        _showSnackBar(error.message, isError: true);
+      }
+    } catch (_) {
+      if (mounted) {
+        _showSnackBar('Gagal menyimpan order.', isError: true);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
+  }
+
+  void _showSnackBar(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: GoogleFonts.poppins(),
+        ),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: isError ? AppColors.error : null,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final catalogAsync = ref.watch(catalogProvider);
+    final availableServices = catalogAsync.value ?? const <LaundryService>[];
+
     return Scaffold(
       backgroundColor: AppColors.dashboardBackground,
       appBar: AppBar(
@@ -116,12 +220,14 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                     child: SizedBox(
                       width: double.infinity,
                       child: OutlinedButton(
-                        onPressed: () {
-                          showServiceBottomSheet(
-                            context,
-                            onServiceSelected: _addService,
-                          );
-                        },
+                        onPressed: _isSaving
+                            ? null
+                            : () {
+                                showServiceBottomSheet(
+                                  context,
+                                  onServiceSelected: _addService,
+                                );
+                              },
                         child: const Text('Tambahkan Layanan'),
                       ),
                     ),
@@ -138,6 +244,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                               form: _selectedServices[i].form,
                               subtotal: _selectedServices[i].subtotal,
                               showDivider: i > 0,
+                              availableServices: availableServices,
                               onServiceChanged: (service) =>
                                   _updateService(_selectedServices[i], service),
                               onWeightChanged: (value) => _updateServiceFields(
@@ -160,17 +267,20 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                     title: 'Pembayaran',
                     child: Row(
                       children: [
-                        for (var i = 0; i < NewOrderPaymentMethod.values.length; i++) ...[
+                        for (var i = 0;
+                            i < NewOrderPaymentMethod.values.length;
+                            i++) ...[
                           if (i > 0) const SizedBox(width: 12),
                           Expanded(
                             child: SelectableChip(
                               expand: true,
                               label: NewOrderPaymentMethod.values[i].label,
-                              isSelected:
-                                  _paymentMethod == NewOrderPaymentMethod.values[i],
+                              isSelected: _paymentMethod ==
+                                  NewOrderPaymentMethod.values[i],
                               onTap: () {
                                 setState(() {
-                                  _paymentMethod = NewOrderPaymentMethod.values[i];
+                                  _paymentMethod =
+                                      NewOrderPaymentMethod.values[i];
                                 });
                               },
                             ),
@@ -192,7 +302,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
           ),
           NewOrderBottomActions(
             showWhatsAppShare: _showWhatsAppShare,
-            onSaveOrder: () {},
+            onSaveOrder: _isSaving ? () {} : _saveOrder,
             onPrintReceipt: () {
               setState(() => _showWhatsAppShare = true);
               context.push('/laundry-receipt');

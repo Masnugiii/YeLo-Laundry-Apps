@@ -2,12 +2,14 @@ import { Injectable } from '@nestjs/common';
 import {
   CashflowType,
   OrderPaymentStatus,
+  OrderStatus,
   PaymentStatus,
   Prisma,
   ReferenceType,
   TimelineType,
 } from '@prisma/client';
 import { PrismaService } from '../database/prisma/prisma.service';
+import { OrderStatusTransitionService } from '../order/order-status-transition.service';
 import { decodeOrderNotes } from '../order/utils/order-meta.util';
 import { calculateOrderTotals } from '../order/order.mapper';
 import { PaymentQueryDto } from './dto/payment.dto';
@@ -40,6 +42,7 @@ export class PaymentRepository {
   constructor(
     private readonly prisma: PrismaService,
     private readonly financeSettings: FinanceSettingsRepository,
+    private readonly orderStatusTransitionService: OrderStatusTransitionService,
   ) {}
 
   findMany(query: PaymentQueryDto) {
@@ -317,6 +320,13 @@ export class PaymentRepository {
           select: {
             customerId: true,
             invoiceNumber: true,
+            orderStatus: true,
+            pickupRequired: true,
+            notes: true,
+            items: {
+              where: { deletedAt: null },
+              select: { subtotal: true },
+            },
           },
         },
       },
@@ -346,6 +356,43 @@ export class PaymentRepository {
 
     await this.syncOrderPaymentStatus(tx, payment.orderId);
 
+    const grandTotal = this.getOrderGrandTotal({
+      id: payment.orderId,
+      ...payment.order,
+      customerId: payment.order.customerId,
+      invoiceNumber: payment.order.invoiceNumber,
+      paymentStatus: OrderPaymentStatus.UNPAID,
+      orderStatus: payment.order.orderStatus,
+      payments: [],
+    });
+
+    const paidTotal = await this.getPaidTotalForOrder(payment.orderId, tx);
+    const isFullyPaid = paidTotal >= grandTotal && grandTotal > 0;
+    const nextStatus = this.orderStatusTransitionService.resolveStatusAfterPayment(
+      payment.order.orderStatus,
+      {
+        pickupRequired: payment.order.pickupRequired,
+        isFullyPaid,
+      },
+    );
+
+    if (nextStatus && nextStatus !== payment.order.orderStatus) {
+      await tx.order.update({
+        where: { id: payment.orderId },
+        data: { orderStatus: nextStatus },
+      });
+
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId: payment.orderId,
+          previousStatus: payment.order.orderStatus,
+          currentStatus: nextStatus,
+          changedByEmployeeId: employeeId,
+          notes: 'Payment received',
+        },
+      });
+    }
+
     const existingInvoice = await this.financeSettings.getInvoiceByOrderId(
       payment.orderId,
     );
@@ -362,7 +409,7 @@ export class PaymentRepository {
           orderId: payment.orderId,
           customerId: payment.order.customerId,
           orderNumber: payment.order.invoiceNumber,
-          amount: Number(payment.amount),
+          amount: grandTotal,
           status: 'ISSUED',
           generatedAt: new Date().toISOString(),
           generatedByEmployeeId: employeeId,

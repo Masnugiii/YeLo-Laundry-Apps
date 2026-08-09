@@ -4,11 +4,13 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
+import 'package:yelo_laundry_erp/core/providers/core_providers.dart';
 import 'package:yelo_laundry_erp/core/session/session_provider.dart';
 import 'package:yelo_laundry_erp/features/dashboard/providers/dashboard_menu_badge_actions.dart';
-import 'package:yelo_laundry_erp/features/pickup_delivery/data/dummy_pickup_delivery_requests.dart';
+import 'package:yelo_laundry_erp/features/pickup_delivery/data/pickup_delivery_mapper.dart';
 import 'package:yelo_laundry_erp/features/pickup_delivery/models/pickup_delivery_request.dart';
 import 'package:yelo_laundry_erp/features/pickup_delivery/presentation/widgets/pickup_delivery_card.dart';
+import 'package:yelo_laundry_erp/shared/widgets/api_state_widgets.dart';
 import 'package:yelo_laundry_erp/shared/widgets/selectable_chip.dart';
 
 class PickupDeliveryScreen extends ConsumerStatefulWidget {
@@ -24,6 +26,11 @@ class _PickupDeliveryScreenState extends ConsumerState<PickupDeliveryScreen> {
 
   final _searchController = TextEditingController();
   PickupDeliveryFilter _selectedFilter = PickupDeliveryFilter.all;
+  Map<String, dynamic>? _dashboard;
+  bool _loadingDashboard = true;
+  List<PickupDeliveryRequest> _requests = [];
+  bool _loadingRequests = true;
+  String? _requestError;
 
   @override
   void initState() {
@@ -31,7 +38,62 @@ class _PickupDeliveryScreenState extends ConsumerState<PickupDeliveryScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final role = ref.read(userRoleProvider);
       markPickupDeliveryBadgeRead(ref, role);
+      _loadDashboard();
+      _loadRequests();
     });
+  }
+
+  Future<void> _loadRequests() async {
+    setState(() {
+      _loadingRequests = true;
+      _requestError = null;
+    });
+
+    try {
+      final repository = ref.read(pickupDeliveryRepositoryProvider);
+      final results = await Future.wait([
+        repository.fetchPickups(),
+        repository.fetchDeliveries(),
+      ]);
+
+      final requests = [
+        ...results[0].map(mapPickupDeliveryJob),
+        ...results[1].map(mapPickupDeliveryJob),
+      ]..sort((a, b) => b.scheduledDate.compareTo(a.scheduledDate));
+
+      if (mounted) {
+        setState(() {
+          _requests = requests;
+          _loadingRequests = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _loadingRequests = false;
+          _requestError = 'Gagal memuat data pickup & delivery.';
+        });
+      }
+    }
+  }
+
+  Future<void> _loadDashboard() async {
+    setState(() => _loadingDashboard = true);
+
+    try {
+      final data =
+          await ref.read(pickupDeliveryRepositoryProvider).fetchDashboard();
+      if (mounted) {
+        setState(() {
+          _dashboard = data;
+          _loadingDashboard = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _loadingDashboard = false);
+      }
+    }
   }
 
   @override
@@ -40,12 +102,31 @@ class _PickupDeliveryScreenState extends ConsumerState<PickupDeliveryScreen> {
     super.dispose();
   }
 
+  List<PickupDeliveryRequest> _filteredRequests() {
+    final normalizedQuery = _searchController.text.trim().toLowerCase();
+
+    return _requests.where((request) {
+      final matchesSearch = normalizedQuery.isEmpty ||
+          request.customerName.toLowerCase().contains(normalizedQuery) ||
+          request.customerPhone.toLowerCase().contains(normalizedQuery);
+
+      if (!matchesSearch) {
+        return false;
+      }
+
+      return switch (_selectedFilter) {
+        PickupDeliveryFilter.all => true,
+        PickupDeliveryFilter.pickup => request.status.isPickupRelated,
+        PickupDeliveryFilter.delivery => request.status.isDeliveryRelated,
+        PickupDeliveryFilter.today => request.isToday,
+        PickupDeliveryFilter.completed => request.status.isCompleted,
+      };
+    }).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final requests = filterPickupDeliveryRequests(
-      query: _searchController.text,
-      filter: _selectedFilter,
-    );
+    final requests = _filteredRequests();
 
     return Scaffold(
       backgroundColor: AppColors.dashboardBackground,
@@ -65,6 +146,22 @@ class _PickupDeliveryScreenState extends ConsumerState<PickupDeliveryScreen> {
       ),
       body: Column(
         children: [
+          if (_loadingDashboard)
+            const LinearProgressIndicator(
+              minHeight: 3,
+              color: AppColors.accent,
+              backgroundColor: AppColors.divider,
+            )
+          else if (_dashboard != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.s20,
+                AppSpacing.s12,
+                AppSpacing.s20,
+                AppSpacing.s8,
+              ),
+              child: _PickupDeliveryDashboardSummary(dashboard: _dashboard!),
+            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(
               AppSpacing.s20,
@@ -134,7 +231,14 @@ class _PickupDeliveryScreenState extends ConsumerState<PickupDeliveryScreen> {
           ),
           const SizedBox(height: AppSpacing.s12),
           Expanded(
-            child: requests.isEmpty
+            child: _loadingRequests
+                ? const ApiLoadingView()
+                : _requestError != null
+                    ? ApiErrorView(
+                        message: _requestError!,
+                        onRetry: _loadRequests,
+                      )
+                    : requests.isEmpty
                 ? Center(
                     child: Text(
                       'Tidak ada permintaan pickup & delivery',
@@ -145,27 +249,112 @@ class _PickupDeliveryScreenState extends ConsumerState<PickupDeliveryScreen> {
                       ),
                     ),
                   )
-                : ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.s20,
-                      AppSpacing.s8,
-                      AppSpacing.s20,
-                      AppSpacing.s32,
-                    ),
-                    itemCount: requests.length,
-                    itemBuilder: (context, index) {
-                      final request = requests[index];
-                      return PickupDeliveryCard(
-                        request: request,
-                        onContactCustomer: () {},
-                        onViewDetail: () {},
-                        onOpenMaps: () {},
-                      );
+                : RefreshIndicator(
+                    onRefresh: () async {
+                      await Future.wait([
+                        _loadDashboard(),
+                        _loadRequests(),
+                      ]);
                     },
+                    child: ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.s20,
+                        AppSpacing.s8,
+                        AppSpacing.s20,
+                        AppSpacing.s32,
+                      ),
+                      itemCount: requests.length,
+                      itemBuilder: (context, index) {
+                        final request = requests[index];
+                        return PickupDeliveryCard(
+                          request: request,
+                          onContactCustomer: () {},
+                          onViewDetail: () {},
+                          onOpenMaps: () {},
+                        );
+                      },
+                    ),
                   ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _PickupDeliveryDashboardSummary extends StatelessWidget {
+  const _PickupDeliveryDashboardSummary({required this.dashboard});
+
+  final Map<String, dynamic> dashboard;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.s16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.divider),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _SummaryItem(
+              label: 'Pickup',
+              value: '${dashboard['pickupRequested'] ?? 0}',
+            ),
+          ),
+          Expanded(
+            child: _SummaryItem(
+              label: 'Siap Kirim',
+              value: '${dashboard['readyForDelivery'] ?? 0}',
+            ),
+          ),
+          Expanded(
+            child: _SummaryItem(
+              label: 'Terkirim',
+              value: '${dashboard['deliveredToday'] ?? 0}',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SummaryItem extends StatelessWidget {
+  const _SummaryItem({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: GoogleFonts.poppins(
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+            color: AppColors.primary,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.s4),
+        Text(
+          label,
+          textAlign: TextAlign.center,
+          style: GoogleFonts.poppins(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: AppColors.textSecondary,
+          ),
+        ),
+      ],
     );
   }
 }

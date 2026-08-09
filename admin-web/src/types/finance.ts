@@ -195,3 +195,49 @@ export interface FinanceReportParams {
   dateFrom?: string;
   dateTo?: string;
 }
+
+export interface Payment {
+  id: string;
+  referenceNumber: string | null;
+  orderId: string;
+  orderNumber: string;
+  queueNumber: string;
+  customer: {
+    id: string;
+    customerCode: string;
+    fullName: string;
+    phone: string;
+  };
+  paymentMethod: {
+    id: string;
+    code: string;
+    name: string;
+    apiCode: string | null;
+  };
+  amount: number;
+  refundedAmount: number;
+  netAmount: number;
+  paymentStatus: string;
+  displayStatus: string;
+  paidAt: string;
+  notes: string | null;
+  receivedBy: {
+    id: string;
+    fullName: string;
+    employeeCode: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PaymentListParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  customerId?: string;
+  orderId?: string;
+  paymentMethod?: string;
+  paymentStatus?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}

@@ -104,12 +104,24 @@ class OrderRepository {
             .toList()
         : const <OrderTimelineEntry>[];
 
+    final assignedEmployee = json['assignedEmployee'] as Map<String, dynamic>?;
+    final serviceName = json['primaryServiceName'] as String? ??
+        json['serviceSummary'] as String?;
+
     return IncomingOrder(
       id: json['id'] as String,
       queueNumber: json['queueNumber'] as String? ?? '',
       customerName: json['customerName'] as String? ?? '',
-      service: LaundryServiceType.regular,
-      serviceDisplayName: json['primaryServiceName'] as String?,
+      customerPhone: json['customerPhone'] as String? ?? '',
+      invoiceNumber: json['invoiceNumber'] as String? ??
+          json['orderNumber'] as String? ??
+          '',
+      itemCount: (json['itemCount'] as num?)?.toInt() ?? 0,
+      assignedEmployeeName:
+          assignedEmployee?['fullName'] as String? ?? '-',
+      apiPaymentMethod: json['paymentMethod'] as String?,
+      service: _mapServiceType(serviceName),
+      serviceDisplayName: serviceName,
       orderValue: (json['grandTotal'] as num?)?.toInt() ?? 0,
       fulfillmentType: json['deliveryRequired'] == true
           ? FulfillmentType.delivery
@@ -136,6 +148,20 @@ class OrderRepository {
           : OrderPaymentStatus.belumLunas,
       timelineEntries: timeline,
     );
+  }
+
+  LaundryServiceType _mapServiceType(String? serviceName) {
+    final normalized = (serviceName ?? '').toLowerCase();
+    if (normalized.contains('express')) {
+      return LaundryServiceType.express;
+    }
+    if (normalized.contains('bed')) {
+      return LaundryServiceType.bedCover;
+    }
+    if (normalized.contains('iron') || normalized.contains('setrika')) {
+      return LaundryServiceType.ironOnly;
+    }
+    return LaundryServiceType.regular;
   }
 
   IncomingOrderStatus _mapStatus(String? status) {

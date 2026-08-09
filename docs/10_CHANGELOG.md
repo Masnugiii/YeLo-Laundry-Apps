@@ -9,6 +9,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Sprint 32 (Operational Core)
+
+#### Backend
+- Centralized `OrderStatusTransitionService` for manual and operational order status validation
+- Order audit logging for create, status transition, and cancel (`module: order`)
+- Payment flow advances order status after full payment (e.g. `CREATED` → `PAYMENT_CONFIRMED` or `WAITING_PICKUP_DRIVER`)
+- Auto-invoice on payment now uses order grand total instead of single payment amount
+
+#### Admin Web
+- Operational Attendance page (`/operations/attendance`) with dashboard metrics and paginated records
+- Finance Payments page (`/finance/payments`) listing payments from API
+- Pickup & Delivery page enhanced with pickup/delivery job lists from API
+
+#### Flutter ERP
+- Catalog repository wired to `/catalog/services` for new order service selection
+- New order creation wired to `POST /orders`
+- Customer create wired to `POST /customers`
+- Binatu attendance check-in/check-out wired to attendance API
+- Wallet repository for customer wallet operations
+- Pickup & Delivery dashboard summary from API
+
+#### Customer App
+- Fixed `api_state_widgets.dart` path and theme imports (compile fix)
+
+#### Tests
+- `test/order/order-status-transition.service.spec.ts`
+
+#### Sprint 32 Completion Pass (Flutter ERP)
+- Payment screens wired to `POST /payments` via `OrderPaymentService`
+- Unpaid/today orders loaded from API with `paymentStatus` and date filters
+- Binatu/laundry queue wired to `/laundry/queues/ironing` with production actions
+- Wallet top-up, deduction, and history wired to customer wallet API
+- Customer detail loaded from `GET /customers/:id`
+- Pickup & delivery jobs from `/pickups` and `/deliveries`
+- Owner attendance list from `/attendance`
+- Expenses list and create from `/expenses`
+- Role dashboards use operational summary APIs
+
 ### Planned
 - Backend REST API implementation
 - Database schema & migrations

@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
+import 'package:yelo_laundry_erp/core/providers/core_providers.dart';
 import 'package:yelo_laundry_erp/features/wallet/data/dummy_wallet_admins.dart';
 import 'package:yelo_laundry_erp/features/wallet/data/dummy_wallet_transactions.dart';
 import 'package:yelo_laundry_erp/features/wallet/models/wallet_admin.dart';
 import 'package:yelo_laundry_erp/features/wallet/models/wallet_payment_confirmation.dart';
+import 'package:yelo_laundry_erp/features/wallet/providers/wallet_providers.dart';
 import 'package:yelo_laundry_erp/features/wallet/presentation/widgets/wallet_admin_dropdown.dart';
 import 'package:yelo_laundry_erp/features/wallet/presentation/widgets/wallet_sheet_widgets.dart';
 
@@ -34,7 +37,7 @@ void showWalletDeductionBottomSheet(
   );
 }
 
-class _WalletDeductionBottomSheet extends StatefulWidget {
+class _WalletDeductionBottomSheet extends ConsumerStatefulWidget {
   const _WalletDeductionBottomSheet({
     required this.currentBalance,
     required this.customerId,
@@ -46,11 +49,12 @@ class _WalletDeductionBottomSheet extends StatefulWidget {
   final String customerName;
 
   @override
-  State<_WalletDeductionBottomSheet> createState() =>
+  ConsumerState<_WalletDeductionBottomSheet> createState() =>
       _WalletDeductionBottomSheetState();
 }
 
-class _WalletDeductionBottomSheetState extends State<_WalletDeductionBottomSheet> {
+class _WalletDeductionBottomSheetState
+    extends ConsumerState<_WalletDeductionBottomSheet> {
   final _amountController = TextEditingController();
   String _selectedReason = walletDeductionReasons.first;
   WalletAdmin _selectedAdmin = dummyCurrentWalletAdmin;
@@ -61,8 +65,33 @@ class _WalletDeductionBottomSheetState extends State<_WalletDeductionBottomSheet
     super.dispose();
   }
 
-  void _continue() {
+  Future<void> _continue() async {
     final amount = int.tryParse(_amountController.text) ?? 0;
+    if (amount <= 0) return;
+
+    try {
+      await ref.read(walletRepositoryProvider).deduct(
+            widget.customerId,
+            amount: amount.toDouble(),
+            notes: _selectedReason,
+          );
+      ref.invalidate(customerWalletProvider(widget.customerId));
+      ref.invalidate(walletTransactionsProvider(widget.customerId));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Gagal memproses pengurangan saldo.',
+            style: GoogleFonts.poppins(fontSize: 13),
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+
     final dateTime = DateTime.now();
     final confirmation = WalletPaymentConfirmation(
       customerId: widget.customerId,

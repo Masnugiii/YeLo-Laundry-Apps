@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
+import 'package:yelo_laundry_erp/core/network/api_exception.dart';
 import 'package:yelo_laundry_erp/features/new_order/utils/currency_formatter.dart';
-import 'package:yelo_laundry_erp/features/orders/data/order_payment_store.dart';
 import 'package:yelo_laundry_erp/features/orders/models/order_payment.dart';
 import 'package:yelo_laundry_erp/features/orders/presentation/payment/payment_flow_theme.dart';
-import 'package:yelo_laundry_erp/features/orders/presentation/widgets/order_payment_bottom_sheet.dart';
+import 'package:yelo_laundry_erp/features/orders/services/order_payment_service.dart';
 
-class CashPaymentScreen extends StatefulWidget {
+class CashPaymentScreen extends ConsumerStatefulWidget {
   const CashPaymentScreen({
     super.key,
     required this.session,
@@ -20,13 +21,20 @@ class CashPaymentScreen extends StatefulWidget {
   final OrderPaymentSession session;
 
   @override
-  State<CashPaymentScreen> createState() => _CashPaymentScreenState();
+  ConsumerState<CashPaymentScreen> createState() => _CashPaymentScreenState();
 }
 
-class _CashPaymentScreenState extends State<CashPaymentScreen> {
+class _CashPaymentScreenState extends ConsumerState<CashPaymentScreen> {
   final _amountController = TextEditingController();
+  bool _isSubmitting = false;
 
-  static const _dummyChangeAmount = 35000;
+  int get _cashReceived =>
+      int.tryParse(_amountController.text.trim()) ?? 0;
+
+  int get _changeAmount =>
+      _cashReceived > widget.session.order.orderValue
+          ? _cashReceived - widget.session.order.orderValue
+          : 0;
 
   @override
   void dispose() {
@@ -35,21 +43,68 @@ class _CashPaymentScreenState extends State<CashPaymentScreen> {
   }
 
   Future<void> _confirmPayment() async {
-    final confirmation = buildPaymentConfirmation(
-      session: widget.session,
-      cashReceived: 100000,
-      changeAmount: _dummyChangeAmount,
-    );
+    if (_isSubmitting) return;
 
-    recordOrderPaymentToUangMasuk(
-      order: widget.session.order,
-      confirmation: confirmation,
-    );
+    final cashReceived = _cashReceived;
+    if (cashReceived < widget.session.order.orderValue) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppColors.error,
+          content: Text(
+            'Nominal uang customer kurang dari total tagihan.',
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+          ),
+        ),
+      );
+      return;
+    }
 
-    await context.push('/order-payment-success', extra: confirmation);
+    setState(() => _isSubmitting = true);
 
-    if (!mounted) return;
-    context.pop(confirmation);
+    try {
+      final confirmation = await ref
+          .read(orderPaymentServiceProvider)
+          .submitPayment(
+            widget.session,
+            cashReceived: cashReceived,
+          );
+
+      if (!mounted) return;
+
+      await context.push('/order-payment-success', extra: confirmation);
+
+      if (!mounted) return;
+      context.pop(confirmation);
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppColors.error,
+          content: Text(
+            error.message,
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppColors.error,
+          content: Text(
+            'Gagal memproses pembayaran. Silakan coba lagi.',
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
   }
 
   @override
@@ -107,6 +162,7 @@ class _CashPaymentScreenState extends State<CashPaymentScreen> {
                   controller: _amountController,
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  onChanged: (_) => setState(() {}),
                   style: GoogleFonts.poppins(fontSize: 15),
                   decoration: InputDecoration(
                     hintText: 'Masukkan nominal uang customer',
@@ -137,20 +193,11 @@ class _CashPaymentScreenState extends State<CashPaymentScreen> {
                 Text('Kembalian', style: PaymentFlowTheme.labelStyle),
                 const SizedBox(height: AppSpacing.s8),
                 Text(
-                  formatRupiah(_dummyChangeAmount),
+                  formatRupiah(_changeAmount),
                   style: GoogleFonts.poppins(
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
                     color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.s4),
-                Text(
-                  'Perhitungan kembalian akan otomatis pada integrasi berikutnya.',
-                  style: GoogleFonts.poppins(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w400,
-                    color: AppColors.textSecondary,
                   ),
                 ),
               ],
@@ -158,12 +205,21 @@ class _CashPaymentScreenState extends State<CashPaymentScreen> {
           ),
           const SizedBox(height: AppSpacing.s24),
           FilledButton(
-            onPressed: _confirmPayment,
+            onPressed: _isSubmitting ? null : _confirmPayment,
             style: PaymentFlowTheme.primaryButtonStyle,
-            child: Text(
-              'Konfirmasi Pembayaran',
-              style: PaymentFlowTheme.primaryButtonTextStyle,
-            ),
+            child: _isSubmitting
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.onPrimary,
+                    ),
+                  )
+                : Text(
+                    'Konfirmasi Pembayaran',
+                    style: PaymentFlowTheme.primaryButtonTextStyle,
+                  ),
           ),
         ],
       ),

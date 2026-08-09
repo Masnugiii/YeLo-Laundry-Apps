@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:yelo_laundry_erp/core/providers/core_providers.dart';
+import 'package:yelo_laundry_erp/features/binatu/data/binatu_laundry_mapper.dart';
 import 'package:yelo_laundry_erp/features/binatu/data/dummy_binatu_orders.dart';
 import 'package:yelo_laundry_erp/features/binatu/models/binatu_ironing_order.dart';
 import 'package:yelo_laundry_erp/features/binatu/models/binatu_ironing_status.dart';
@@ -9,15 +11,35 @@ import 'package:yelo_laundry_erp/features/binatu/providers/ironing_queue_priorit
 import 'package:yelo_laundry_erp/features/notifications/models/operator_assistance_notification.dart';
 import 'package:yelo_laundry_erp/features/notifications/providers/app_notification_provider.dart';
 
-class BinatuOrderNotifier extends Notifier<List<BinatuIroningOrder>> {
+class BinatuOrderNotifier extends AsyncNotifier<List<BinatuIroningOrder>> {
   @override
-  List<BinatuIroningOrder> build() {
+  Future<List<BinatuIroningOrder>> build() async {
     ref.listen(ironingQueuePriorityProvider, (_, _) {
       Future.microtask(_runPostInitTasks);
     });
-    final orders = List.of(dummyBinatuIroningOrders());
+
+    final orders = await _loadFromApi();
     Future.microtask(_runPostInitTasks);
     return orders;
+  }
+
+  List<BinatuIroningOrder> get _orders => state.value ?? [];
+
+  Future<List<BinatuIroningOrder>> _loadFromApi() async {
+    final items =
+        await ref.read(laundryRepositoryProvider).fetchIroningQueue();
+    return items.map(mapBinatuIroningOrder).toList();
+  }
+
+  Future<void> refresh() async {
+    state = const AsyncLoading();
+    state = AsyncData(await _loadFromApi());
+    _runPostInitTasks();
+  }
+
+  Future<void> _runActionAndRefresh(String orderId, String action) async {
+    await ref.read(laundryRepositoryProvider).runAction(orderId, action);
+    await refresh();
   }
 
   void _runPostInitTasks() {
@@ -26,7 +48,7 @@ class BinatuOrderNotifier extends Notifier<List<BinatuIroningOrder>> {
   }
 
   void _seedOperatorAssistanceNotifications() {
-    for (final order in state) {
+    for (final order in _orders) {
       if (order.isWaitingForOperatorAssistance) {
         ref.read(appNotificationProvider.notifier).upsertOperatorAssistance(
               _operatorAssistanceNotificationFor(order),
@@ -49,30 +71,36 @@ class BinatuOrderNotifier extends Notifier<List<BinatuIroningOrder>> {
     );
   }
 
-  BinatuDashboardSummary dashboardSummary() {
-    final waiting = state
-        .where(
-          (o) =>
-              o.ironingStatus == BinatuIroningStatus.waitingForBinatu ||
-              o.ironingStatus ==
-                  BinatuIroningStatus.waitingForOperatorAssistance,
-        )
-        .length;
-    final ironing = state
-        .where(
-          (o) =>
-              o.ironingStatus == BinatuIroningStatus.currentlyIroning ||
-              o.ironingStatus == BinatuIroningStatus.acceptedByBinatu,
-        )
-        .length;
-    final completedOrders = state.where(
+  BinatuDashboardSummary dashboardSummary({Map<String, dynamic>? laundry}) {
+    final waiting = laundry != null
+        ? (laundry['waitingIroning'] as num?)?.toInt() ?? 0
+        : _orders
+            .where(
+              (o) =>
+                  o.ironingStatus == BinatuIroningStatus.waitingForBinatu ||
+                  o.ironingStatus ==
+                      BinatuIroningStatus.waitingForOperatorAssistance,
+            )
+            .length;
+    final ironing = laundry != null
+        ? (laundry['currentlyIroning'] as num?)?.toInt() ?? 0
+        : _orders
+            .where(
+              (o) =>
+                  o.ironingStatus == BinatuIroningStatus.currentlyIroning ||
+                  o.ironingStatus == BinatuIroningStatus.acceptedByBinatu,
+            )
+            .length;
+    final completedOrders = _orders.where(
       (o) =>
           o.ironingStatus == BinatuIroningStatus.finishedIroning ||
           o.ironingStatus == BinatuIroningStatus.readyForPickup,
     );
-    final ironingCompleted = completedOrders
-        .where((order) => !order.isOperatorAssistance)
-        .length;
+    final ironingCompleted = laundry != null
+        ? (laundry['qualityCheck'] as num?)?.toInt() ?? 0
+        : completedOrders
+            .where((order) => !order.isOperatorAssistance)
+            .length;
     final operatorAssistanceCompleted = completedOrders
         .where((order) => order.isOperatorAssistance)
         .length;
@@ -92,7 +120,7 @@ class BinatuOrderNotifier extends Notifier<List<BinatuIroningOrder>> {
   }
 
   int operatorAssistanceCompletedCount() {
-    return state
+    return _orders
         .where(
           (order) =>
               order.isOperatorAssistance &&
@@ -103,18 +131,18 @@ class BinatuOrderNotifier extends Notifier<List<BinatuIroningOrder>> {
   }
 
   BinatuIroningOrder? orderById(String id) {
-    for (final order in state) {
+    for (final order in _orders) {
       if (order.id == id) return order;
     }
     return null;
   }
 
   void _updateOrder(String id, BinatuIroningOrder updated) {
-    final index = state.indexWhere((order) => order.id == id);
+    final index = _orders.indexWhere((order) => order.id == id);
     if (index == -1) return;
-    final orders = [...state];
+    final orders = [..._orders];
     orders[index] = updated;
-    state = orders;
+    state = AsyncData(orders);
   }
 
   void processWaitingTimers() {
@@ -126,7 +154,7 @@ class BinatuOrderNotifier extends Notifier<List<BinatuIroningOrder>> {
     final now = DateTime.now();
     var changed = false;
 
-    final updatedOrders = state.map((order) {
+    final updatedOrders = _orders.map((order) {
       if (!order.isWaitingForBinatu) return order;
 
       final elapsed = now.difference(order.waitingStartedAt);
@@ -147,19 +175,19 @@ class BinatuOrderNotifier extends Notifier<List<BinatuIroningOrder>> {
     }).toList();
 
     if (changed) {
-      state = updatedOrders;
+      state = AsyncData(updatedOrders);
     }
   }
 
   void createIroningJob(BinatuIroningOrder order) {
     final createdAt = DateTime.now();
-    state = [
+    state = AsyncData([
       order.copyWith(
         ironingStatus: BinatuIroningStatus.waitingForBinatu,
         waitingStartedAt: createdAt,
       ),
-      ...state,
-    ];
+      ..._orders,
+    ]);
 
     ref.read(binatuNotificationProvider.notifier).prepend(
           BinatuNotification(
@@ -219,7 +247,8 @@ class BinatuOrderNotifier extends Notifier<List<BinatuIroningOrder>> {
     processWaitingTimers();
     final settings = ref.read(ironingQueuePriorityProvider);
     final order = orderById(orderId);
-    if (order == null || !order.canOperatorAccept(settings.allowOperatorAssistance)) {
+    if (order == null ||
+        !order.canOperatorAccept(settings.allowOperatorAssistance)) {
       return;
     }
 
@@ -256,65 +285,53 @@ class BinatuOrderNotifier extends Notifier<List<BinatuIroningOrder>> {
     acceptJobAsBinatu(orderId, staffName: staffName);
   }
 
-  void startIroning(String orderId) {
+  Future<void> startIroning(String orderId) async {
     final order = orderById(orderId);
     if (order == null || !order.canStartIroning) return;
 
-    _updateOrder(
-      orderId,
-      order.copyWith(
-        ironingStatus: BinatuIroningStatus.currentlyIroning,
-      ),
-    );
+    await _runActionAndRefresh(orderId, 'start-ironing');
   }
 
-  void finishIroning(String orderId) {
+  Future<void> finishIroning(String orderId) async {
     final order = orderById(orderId);
     if (order == null || !order.canFinishIroning) return;
 
-    final finishedAt = DateTime.now();
-    _updateOrder(
-      orderId,
-      order.copyWith(
-        ironingStatus: BinatuIroningStatus.finishedIroning,
-        finishedAt: finishedAt,
-      ),
-    );
+    await _runActionAndRefresh(orderId, 'finish-ironing');
+
+    final refreshed = orderById(orderId);
+    if (refreshed == null) return;
 
     ref.read(binatuNotificationProvider.notifier).prepend(
           BinatuNotification(
-            id: 'bnotif-finish-${finishedAt.millisecondsSinceEpoch}',
+            id: 'bnotif-finish-${DateTime.now().millisecondsSinceEpoch}',
             type: BinatuNotificationType.ironingFinished,
-            orderNumber: order.orderNumber,
-            customerName: order.customerName,
-            assignedBinatu: order.assignedBinatu,
-            createdAt: finishedAt,
-            message: order.isOperatorAssistance
+            orderNumber: refreshed.orderNumber,
+            customerName: refreshed.customerName,
+            assignedBinatu: refreshed.assignedBinatu,
+            createdAt: DateTime.now(),
+            message: refreshed.isOperatorAssistance
                 ? 'Bantuan operator selesai menyetrika.'
                 : 'Setrika selesai.',
           ),
         );
   }
 
-  void markReadyForPickup(String orderId) {
+  Future<void> markReadyForPickup(String orderId) async {
     final order = orderById(orderId);
     if (order == null || !order.canMarkReadyForPickup) return;
 
-    final readyAt = DateTime.now();
-    _updateOrder(
-      orderId,
-      order.copyWith(
-        ironingStatus: BinatuIroningStatus.readyForPickup,
-      ),
-    );
+    await _runActionAndRefresh(orderId, 'ready');
+
+    final refreshed = orderById(orderId);
+    if (refreshed == null) return;
 
     ref.read(binatuNotificationProvider.notifier).prepend(
           BinatuNotification(
-            id: 'bnotif-ready-${readyAt.millisecondsSinceEpoch}',
+            id: 'bnotif-ready-${DateTime.now().millisecondsSinceEpoch}',
             type: BinatuNotificationType.readyForCashier,
-            orderNumber: order.orderNumber,
-            customerName: order.customerName,
-            createdAt: readyAt,
+            orderNumber: refreshed.orderNumber,
+            customerName: refreshed.customerName,
+            createdAt: DateTime.now(),
             message: 'Order siap diambil pelanggan.',
           ),
         );
@@ -322,7 +339,7 @@ class BinatuOrderNotifier extends Notifier<List<BinatuIroningOrder>> {
 }
 
 final binatuOrderProvider =
-    NotifierProvider<BinatuOrderNotifier, List<BinatuIroningOrder>>(
+    AsyncNotifierProvider<BinatuOrderNotifier, List<BinatuIroningOrder>>(
   BinatuOrderNotifier.new,
 );
 

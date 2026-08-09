@@ -6,6 +6,7 @@ import 'package:yelo_laundry_erp/core/storage/preferences_service.dart';
 import 'package:yelo_laundry_erp/core/storage/secure_storage_service.dart';
 import 'package:yelo_laundry_erp/features/auth/data/auth_repository.dart';
 import 'package:yelo_laundry_erp/features/attendance/data/attendance_repository.dart';
+import 'package:yelo_laundry_erp/features/catalog/data/catalog_repository.dart';
 import 'package:yelo_laundry_erp/features/customer/data/customer_repository.dart';
 import 'package:yelo_laundry_erp/features/dashboard/data/dashboard_repository.dart';
 import 'package:yelo_laundry_erp/features/employee_master/data/employee_repository.dart';
@@ -15,6 +16,7 @@ import 'package:yelo_laundry_erp/features/notifications/data/notification_reposi
 import 'package:yelo_laundry_erp/features/orders/data/order_repository.dart';
 import 'package:yelo_laundry_erp/features/pickup_delivery/data/pickup_delivery_repository.dart';
 import 'package:yelo_laundry_erp/features/settings/data/settings_repository.dart';
+import 'package:yelo_laundry_erp/features/wallet/data/wallet_repository.dart';
 
 final secureStorageProvider = Provider<SecureStorageService>(
   (ref) => SecureStorageService(),
@@ -48,6 +50,10 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
     secureStorage: ref.watch(secureStorageProvider),
     preferences: ref.watch(preferencesServiceProvider),
   );
+});
+
+final catalogRepositoryProvider = Provider<CatalogRepository>((ref) {
+  return CatalogRepository(ref.watch(apiClientProvider));
 });
 
 final customerRepositoryProvider = Provider<CustomerRepository>((ref) {
@@ -89,4 +95,8 @@ final dashboardRepositoryProvider = Provider<DashboardRepository>((ref) {
 
 final settingsRepositoryProvider = Provider<SettingsRepository>((ref) {
   return SettingsRepository(ref.watch(apiClientProvider));
+});
+
+final walletRepositoryProvider = Provider<WalletRepository>((ref) {
+  return WalletRepository(ref.watch(apiClientProvider));
 });

@@ -2,6 +2,7 @@ import {
   BarChart3,
   Bell,
   ClipboardList,
+  Clock,
   CreditCard,
   FileText,
   LayoutDashboard,
@@ -33,6 +34,7 @@ export const adminNav: NavItem[] = [
       { title: "Orders", href: "/operations/orders", icon: ClipboardList },
       { title: "Laundry Production", href: "/operations/production", icon: Shirt },
       { title: "Pickup & Delivery", href: "/operations/pickup-delivery", icon: Truck },
+      { title: "Attendance", href: "/operations/attendance", icon: Clock },
     ],
   },
   {
@@ -41,6 +43,7 @@ export const adminNav: NavItem[] = [
     children: [
       { title: "Finance Dashboard", href: "/finance/dashboard", icon: LayoutDashboard },
       { title: "Revenue", href: "/finance/revenue", icon: CreditCard },
+      { title: "Payments", href: "/finance/payments", icon: CreditCard },
       { title: "Expenses", href: "/finance/expenses", icon: FileText },
       { title: "Payroll", href: "/finance/payroll", icon: Users },
       { title: "Profit & Loss", href: "/finance/profit-loss", icon: BarChart3 },

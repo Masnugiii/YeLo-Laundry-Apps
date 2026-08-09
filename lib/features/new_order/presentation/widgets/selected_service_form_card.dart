@@ -18,6 +18,7 @@ class SelectedServiceFormCard extends StatefulWidget {
     required this.onServiceChanged,
     required this.onWeightChanged,
     required this.onItemQuantityChanged,
+    this.availableServices = dummyLaundryServices,
     this.showDivider = true,
   });
 
@@ -26,6 +27,7 @@ class SelectedServiceFormCard extends StatefulWidget {
   final ValueChanged<LaundryService> onServiceChanged;
   final ValueChanged<String> onWeightChanged;
   final ValueChanged<String> onItemQuantityChanged;
+  final List<LaundryService> availableServices;
   final bool showDivider;
 
   @override
@@ -62,6 +64,11 @@ class _SelectedServiceFormCardState extends State<SelectedServiceFormCard> {
 
   @override
   Widget build(BuildContext context) {
+    final dropdownServices = widget.availableServices
+            .any((service) => service.id == widget.form.service.id)
+        ? widget.availableServices
+        : [widget.form.service, ...widget.availableServices];
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -82,7 +89,7 @@ class _SelectedServiceFormCardState extends State<SelectedServiceFormCard> {
                 color: AppColors.primary,
               ),
               items: [
-                for (final service in dummyLaundryServices)
+                for (final service in dropdownServices)
                   DropdownMenuItem(
                     value: service,
                     child: Text(service.name),

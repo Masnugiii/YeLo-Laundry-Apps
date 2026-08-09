@@ -187,6 +187,11 @@ class IncomingOrder {
     this.isNew = false,
     this.paymentStatus = OrderPaymentStatus.belumLunas,
     this.serviceDisplayName,
+    this.customerPhone = '',
+    this.invoiceNumber = '',
+    this.itemCount = 0,
+    this.assignedEmployeeName = '-',
+    this.apiPaymentMethod,
     this.isLaundryJobAccepted = false,
     this.laundryPic,
     this.laundryAcceptedAt,
@@ -211,6 +216,11 @@ class IncomingOrder {
   final bool isNew;
   final OrderPaymentStatus paymentStatus;
   final String? serviceDisplayName;
+  final String customerPhone;
+  final String invoiceNumber;
+  final int itemCount;
+  final String assignedEmployeeName;
+  final String? apiPaymentMethod;
   final bool isLaundryJobAccepted;
   final String? laundryPic;
   final DateTime? laundryAcceptedAt;
@@ -252,6 +262,11 @@ class IncomingOrder {
       isNew: isNew,
       paymentStatus: paymentStatus ?? this.paymentStatus,
       serviceDisplayName: serviceDisplayName ?? this.serviceDisplayName,
+      customerPhone: customerPhone,
+      invoiceNumber: invoiceNumber,
+      itemCount: itemCount,
+      assignedEmployeeName: assignedEmployeeName,
+      apiPaymentMethod: apiPaymentMethod,
       isLaundryJobAccepted:
           isLaundryJobAccepted ?? this.isLaundryJobAccepted,
       laundryPic: laundryPic ?? this.laundryPic,

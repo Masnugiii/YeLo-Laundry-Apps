@@ -1,20 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
-import 'package:yelo_laundry_erp/features/orders/data/dummy_today_orders.dart';
+import 'package:yelo_laundry_erp/features/orders/data/order_view_mappers.dart';
+import 'package:yelo_laundry_erp/features/orders/models/today_order.dart';
 import 'package:yelo_laundry_erp/features/orders/presentation/widgets/today_order_card.dart';
+import 'package:yelo_laundry_erp/features/orders/providers/order_query_providers.dart';
+import 'package:yelo_laundry_erp/shared/widgets/api_state_widgets.dart';
 import 'package:yelo_laundry_erp/shared/widgets/selectable_chip.dart';
 
-class TodayOrdersScreen extends StatefulWidget {
+class TodayOrdersScreen extends ConsumerStatefulWidget {
   const TodayOrdersScreen({super.key});
 
   @override
-  State<TodayOrdersScreen> createState() => _TodayOrdersScreenState();
+  ConsumerState<TodayOrdersScreen> createState() => _TodayOrdersScreenState();
 }
 
-class _TodayOrdersScreenState extends State<TodayOrdersScreen> {
+class _TodayOrdersScreenState extends ConsumerState<TodayOrdersScreen> {
   static const _filterLabels = [
     'Semua',
     'Regular',
@@ -24,10 +28,56 @@ class _TodayOrdersScreenState extends State<TodayOrdersScreen> {
     'Selesai',
   ];
 
+  final _searchController = TextEditingController();
   int _selectedFilterIndex = 0;
 
   @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<TodayOrder> _filterOrders(List<TodayOrder> orders) {
+    final query = _searchController.text.trim().toLowerCase();
+    final filtered = orders.where((order) {
+      if (query.isEmpty) return true;
+      return order.customerName.toLowerCase().contains(query) ||
+          order.queueNumber.toLowerCase().contains(query);
+    }).toList();
+
+    return switch (_selectedFilterIndex) {
+      1 => filtered
+          .where((order) => order.serviceType == ServiceType.regular)
+          .toList(),
+      2 => filtered
+          .where((order) => order.serviceType == ServiceType.express)
+          .toList(),
+      3 => filtered
+          .where((order) => order.status == LaundryStatus.menunggu)
+          .toList(),
+      4 => filtered
+          .where(
+            (order) =>
+                order.status == LaundryStatus.dicuci ||
+                order.status == LaundryStatus.dikeringkan ||
+                order.status == LaundryStatus.disetrika,
+          )
+          .toList(),
+      5 => filtered
+          .where(
+            (order) =>
+                order.status == LaundryStatus.selesai ||
+                order.status == LaundryStatus.readyPickup,
+          )
+          .toList(),
+      _ => filtered,
+    };
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final ordersAsync = ref.watch(todayOrdersProvider);
+
     return Scaffold(
       backgroundColor: AppColors.dashboardBackground,
       appBar: AppBar(
@@ -55,6 +105,8 @@ class _TodayOrdersScreenState extends State<TodayOrdersScreen> {
               AppSpacing.s12,
             ),
             child: TextField(
+              controller: _searchController,
+              onChanged: (_) => setState(() {}),
               style: GoogleFonts.poppins(
                 fontSize: 15,
                 color: AppColors.textPrimary,
@@ -115,16 +167,42 @@ class _TodayOrdersScreenState extends State<TodayOrdersScreen> {
           ),
           const SizedBox(height: AppSpacing.s12),
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.s20,
-                AppSpacing.s8,
-                AppSpacing.s20,
-                AppSpacing.s32,
+            child: ordersAsync.when(
+              loading: () => const ApiLoadingView(),
+              error: (error, _) => ApiErrorView(
+                message: messageFromError(error),
+                onRetry: () => ref.invalidate(todayOrdersProvider),
               ),
-              itemCount: dummyTodayOrders.length,
-              itemBuilder: (context, index) {
-                return TodayOrderCard(order: dummyTodayOrders[index]);
+              data: (incomingOrders) {
+                final orders =
+                    incomingOrders.map(toTodayOrder).toList(growable: false);
+                final visibleOrders = _filterOrders(orders);
+
+                if (visibleOrders.isEmpty) {
+                  return Center(
+                    child: Text(
+                      'Tidak ada order untuk hari ini.',
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  );
+                }
+
+                return ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.s20,
+                    AppSpacing.s8,
+                    AppSpacing.s20,
+                    AppSpacing.s32,
+                  ),
+                  itemCount: visibleOrders.length,
+                  itemBuilder: (context, index) {
+                    return TodayOrderCard(order: visibleOrders[index]);
+                  },
+                );
               },
             ),
           ),

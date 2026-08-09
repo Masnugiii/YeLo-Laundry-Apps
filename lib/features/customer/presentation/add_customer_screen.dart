@@ -1,40 +1,82 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
+import 'package:yelo_laundry_erp/core/network/api_exception.dart';
+import 'package:yelo_laundry_erp/core/providers/core_providers.dart';
 import 'package:yelo_laundry_erp/features/customer/models/customer.dart';
 import 'package:yelo_laundry_erp/features/customer/presentation/widgets/customer_fab.dart';
 import 'package:yelo_laundry_erp/features/customer/presentation/widgets/customer_form.dart';
 
-class AddCustomerScreen extends StatefulWidget {
+class AddCustomerScreen extends ConsumerStatefulWidget {
   const AddCustomerScreen({super.key});
 
   @override
-  State<AddCustomerScreen> createState() => _AddCustomerScreenState();
+  ConsumerState<AddCustomerScreen> createState() => _AddCustomerScreenState();
 }
 
-class _AddCustomerScreenState extends State<AddCustomerScreen> {
+class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
   final _formKey = GlobalKey<FormState>();
   final _customerFormKey = GlobalKey<CustomerFormState>();
+  bool _isSaving = false;
 
-  void _saveCustomer(CustomerFormData data) {
-    final customer = data.toCustomer(
-      id: 'cust-${DateTime.now().millisecondsSinceEpoch}',
-    );
+  Future<void> _saveCustomer(CustomerFormData data) async {
+    if (_isSaving) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Pelanggan ${customer.name} berhasil disimpan',
-          style: GoogleFonts.poppins(),
+    setState(() => _isSaving = true);
+
+    try {
+      final customer = await ref.read(customerRepositoryProvider).createCustomer(
+            fullName: data.name,
+            phone: data.phone,
+            occupation: data.occupation,
+            addressDetail: data.address,
+          );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Pelanggan ${customer.name} berhasil disimpan',
+            style: GoogleFonts.poppins(),
+          ),
+          behavior: SnackBarBehavior.floating,
         ),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+      );
 
-    context.pop(customer);
+      context.pop(customer);
+    } on ApiException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.message, style: GoogleFonts.poppins()),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Gagal menyimpan pelanggan.',
+              style: GoogleFonts.poppins(),
+            ),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
   }
 
   @override
@@ -90,7 +132,9 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
               width: double.infinity,
               height: 52,
               child: FilledButton(
-                onPressed: () => _customerFormKey.currentState?.submit(),
+                onPressed: _isSaving
+                    ? null
+                    : () => _customerFormKey.currentState?.submit(),
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: AppColors.onPrimary,
@@ -98,13 +142,22 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
                     borderRadius: BorderRadius.circular(16),
                   ),
                 ),
-                child: Text(
-                  'Simpan Pelanggan',
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                child: _isSaving
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.onPrimary,
+                        ),
+                      )
+                    : Text(
+                        'Simpan Pelanggan',
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
               ),
             ),
           ),
