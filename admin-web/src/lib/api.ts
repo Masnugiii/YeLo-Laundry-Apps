@@ -1,8 +1,28 @@
 import axios, { AxiosError } from "axios";
 import type { ApiEnvelope } from "@/types/api";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3000/api/v1";
+const LOCAL_DEV_API_BASE_URL = "http://localhost:3000/api/v1";
+
+function resolveApiBaseUrl(): string {
+  const configured = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
+
+  if (configured) {
+    return configured.replace(/\/$/, "");
+  }
+
+  // Next inlines NODE_ENV at build time. Never ship a localhost API target.
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "NEXT_PUBLIC_API_BASE_URL is required for production Admin Web builds. " +
+        "Set it to the Railway API base including /api/v1 " +
+        "(for example in admin-web/.env.production or Vercel Project Env).",
+    );
+  }
+
+  return LOCAL_DEV_API_BASE_URL;
+}
+
+const API_BASE_URL = resolveApiBaseUrl();
 
 export const api = axios.create({
   baseURL: API_BASE_URL,

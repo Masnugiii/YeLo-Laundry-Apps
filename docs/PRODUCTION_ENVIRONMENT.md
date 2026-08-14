@@ -1,7 +1,7 @@
 # Production Environment Variables
 
 **Project:** Yelo Laundry ERP  
-**Last updated:** 2026-08-10  
+**Last updated:** 2026-08-14  
 **Rule:** Never commit real production values. Use placeholders only in templates.
 
 ---
@@ -18,35 +18,31 @@
 
 ## Backend (NestJS)
 
+Validated at boot in `src/config/env.validation.ts`. Missing required values crash with:
+
+`Environment validation failed: DATABASE_URL / JWT_SECRET / REFRESH_TOKEN_SECRET`
+
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `DATABASE_URL` | Yes | PostgreSQL connection string. Example: `<PRODUCTION_SECRET>` |
-| `JWT_SECRET` | Yes | Access token signing secret. Example: `<PRODUCTION_SECRET>` |
-| `REFRESH_TOKEN_SECRET` | Yes | Refresh token signing secret. Example: `<PRODUCTION_SECRET>` |
+| `DATABASE_URL` | **Yes** | PostgreSQL URL. On Railway: reference the Postgres plugin variable. |
+| `JWT_SECRET` | **Yes** | Access token signing secret. Generate a long random value. |
+| `REFRESH_TOKEN_SECRET` | **Yes** | Refresh token signing secret. Must differ from `JWT_SECRET`. |
+| `APP_ENV` | **Yes (prod)** | Set `production` on Railway. |
+| `APP_HOST` | No | Default `0.0.0.0` (keep this on Railway). |
+| `PORT` | Platform | Railway sets this. App reads `PORT` then `APP_PORT` then `3000`. |
+| `APP_PORT` | No | Local HTTP port (default `3000`). Unused when Railway `PORT` is set. |
 | `JWT_EXPIRES_IN` | No | Access token TTL (default `7d`) |
 | `REFRESH_TOKEN_EXPIRES_IN` | No | Refresh token TTL (default `30d`) |
 | `APP_NAME` | No | Application display name |
-| `APP_ENV` | Yes (prod) | Set `production` in production |
-| `APP_PORT` | No | HTTP port (default `3000`) |
 | `API_PREFIX` | No | API path prefix (default `api/v1`) |
-| `CORS_ORIGINS` | Yes (prod) | Comma-separated allowed origins. Example: `<ADMIN_PRODUCTION_DOMAIN>` |
+| `CORS_ORIGINS` | **Yes (prod)** | Comma-separated Admin Web origins. Default is localhost only. |
 | `BODY_LIMIT` | No | Max JSON body size (default `10mb`) |
-| `REDIS_HOST` | No | Redis host if/when used (default `localhost`) |
-| `REDIS_PORT` | No | Redis port (default `6379`) |
-| `OTP_LENGTH` | No | OTP digit length (default `6`) |
-| `OTP_EXPIRED_MINUTES` | No | OTP expiry window |
-| `WHATSAPP_API_KEY` | External | OTP/SMS delivery provider key — **EXTERNAL DEPENDENCY** |
-| `WHATSAPP_BASE_URL` | External | OTP/SMS provider API base URL |
-| `R2_ACCOUNT_ID` | Future | Cloudflare R2 account (reserved; local uploads used today) |
-| `R2_ACCESS_KEY` | Future | R2 access key |
-| `R2_SECRET_KEY` | Future | R2 secret key |
-| `R2_BUCKET` | Future | R2 bucket name |
-| `PAYMENT_PROVIDER` | External | Payment gateway identifier — **EXTERNAL DEPENDENCY** |
-| `PAYMENT_MERCHANT_ID` | External | Merchant / store ID |
-| `PAYMENT_API_KEY` | External | Gateway API key |
-| `PAYMENT_SECRET` | External | Gateway API secret |
-| `PAYMENT_WEBHOOK_SECRET` | External | Webhook signature verification secret |
-| `PAYMENT_WEBHOOK_URL` | External | Public webhook URL registered at provider |
+| `REDIS_HOST` | No | Present in config; not used by NestJS services yet |
+| `REDIS_PORT` | No | Present in config; not used by NestJS services yet |
+
+Start command: `npm start` → `node dist/main.js` (after `npm run build`).
+
+`WHATSAPP_*`, `R2_*`, `PAYMENT_*`, `OTP_LENGTH` are **not** read by NestJS `src/` today. They are not boot requirements.
 
 ### LOCAL example
 
@@ -72,12 +68,19 @@ CORS_ORIGINS=https://admin-staging.example.com
 
 ```env
 APP_ENV=production
+APP_HOST=0.0.0.0
 DATABASE_URL=<PRODUCTION_SECRET>
 JWT_SECRET=<PRODUCTION_SECRET>
 REFRESH_TOKEN_SECRET=<PRODUCTION_SECRET>
-CORS_ORIGINS=<ADMIN_PRODUCTION_DOMAIN>
+CORS_ORIGINS=https://ye-lo-laundry-apps.vercel.app
 API_PREFIX=api/v1
 ```
+
+Railway injects `PORT`. Do not set `PORT` to `3000` unless you know the platform requires it.
+
+**Important (Railway Variables):** if `CORS_ORIGINS` is already set, update it to include
+`https://ye-lo-laundry-apps.vercel.app` (comma-separated with any other allowed origins).
+Defaults only apply when the variable is unset.
 
 ---
 
@@ -85,7 +88,10 @@ API_PREFIX=api/v1
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `NEXT_PUBLIC_API_BASE_URL` | Yes (prod) | Backend API URL. Example: `https://api.example.com/api/v1` |
+| `NEXT_PUBLIC_API_BASE_URL` | Yes (prod) | Backend API URL including `/api/v1` |
+
+Login uses `admin-web/src/lib/api.ts`, which reads **`NEXT_PUBLIC_API_BASE_URL` only**.
+Production builds must not fall back to localhost.
 
 ### LOCAL
 
@@ -95,9 +101,14 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:3000/api/v1
 
 ### PRODUCTION
 
+Committed default for builds: `admin-web/.env.production`
+
 ```env
-NEXT_PUBLIC_API_BASE_URL=<PRODUCTION_API_URL>
+NEXT_PUBLIC_API_BASE_URL=https://yelo-laundry-apps-production-2e03.up.railway.app/api/v1
 ```
+
+You may also set the same variable in the Vercel project Environment Variables
+(Production). Rebuild/redeploy Admin Web after changing it.
 
 ---
 

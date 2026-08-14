@@ -6,7 +6,13 @@ export default () => ({
     port: parseInt(process.env.PORT ?? process.env.APP_PORT ?? '3000', 10),
     apiPrefix: process.env.API_PREFIX ?? 'api/v1',
     corsOrigins: (process.env.CORS_ORIGINS ??
-      'http://localhost:3000,http://localhost:3001,http://localhost:5173')
+      [
+        'http://localhost:3000',
+        'http://localhost:3001',
+        'http://localhost:5173',
+        // Production Admin Web (Vercel)
+        'https://ye-lo-laundry-apps.vercel.app',
+      ].join(','))
       .split(',')
       .map((origin) => origin.trim())
       .filter(Boolean),
