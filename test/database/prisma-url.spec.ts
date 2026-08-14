@@ -27,14 +27,22 @@ describe('appendQueryParam', () => {
 });
 
 describe('resolvePrismaDatabaseUrl', () => {
-  it('adds pgbouncer=true and sslmode=require for Supabase pooler hosts', () => {
+  it('adds sslmode=require for Supabase session pooler port 5432 without pgbouncer', () => {
     const input =
       'postgresql://user:pass@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres?schema=public';
     const resolved = resolvePrismaDatabaseUrl(input)!;
     expect(resolved).toContain('schema=public');
+    expect(resolved).toContain('sslmode=require');
+    expect(resolved).not.toContain('pgbouncer=true');
+    expect(hasQueryParam(resolved, 'schema')).toBe(true);
+  });
+
+  it('adds pgbouncer=true only for transaction pooler port 6543', () => {
+    const input =
+      'postgresql://user:pass@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres';
+    const resolved = resolvePrismaDatabaseUrl(input)!;
     expect(resolved).toContain('pgbouncer=true');
     expect(resolved).toContain('sslmode=require');
-    expect(hasQueryParam(resolved, 'schema')).toBe(true);
   });
 
   it('does not rewrite password-bearing userinfo via URL serialization', () => {

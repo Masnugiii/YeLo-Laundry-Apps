@@ -62,6 +62,11 @@ export function hasQueryParam(raw: string, key: string): boolean {
 /**
  * Adapt DATABASE_URL for Prisma without mutating Railway Variables and without
  * rewriting username/password via URL serialization.
+ *
+ * Supabase guidance for Prisma:
+ * - Transaction pooler (port 6543): append pgbouncer=true
+ * - Session pooler / direct (port 5432): do NOT force pgbouncer=true
+ * - Always prefer sslmode=require for supabase hosts
  */
 export function resolvePrismaDatabaseUrl(
   raw: string | undefined = process.env.DATABASE_URL,
@@ -77,12 +82,12 @@ export function resolvePrismaDatabaseUrl(
 
   let resolved = raw.trim();
   const host = diagnostics.hostname.toLowerCase();
-  const isPooler =
-    diagnostics.looksLikePooler ||
-    host.includes('pooler.') ||
-    diagnostics.port === '6543';
+  const port = diagnostics.port ?? '5432';
+  const isTransactionPooler =
+    port === '6543' ||
+    (host.includes('pooler.') && port === '6543');
 
-  if (isPooler && !diagnostics.hasPgbouncer) {
+  if (isTransactionPooler && !diagnostics.hasPgbouncer) {
     resolved = appendQueryParam(resolved, 'pgbouncer', 'true');
   }
 
@@ -304,6 +309,8 @@ export class PrismaService
 {
   private readonly logger = new Logger(PrismaService.name);
   private connectPromise: Promise<void> | null = null;
+  private lastConnectionErrorKind: PrismaConnectionFailureKind | null = null;
+  private lastConnectionErrorMessage: string | null = null;
 
   constructor() {
     const url = resolvePrismaDatabaseUrl(process.env.DATABASE_URL);
@@ -316,6 +323,43 @@ export class PrismaService
           }
         : undefined,
     );
+  }
+
+  getConnectionDiagnostics() {
+    const configured = inspectDatabaseUrl(process.env.DATABASE_URL);
+    const resolved = inspectDatabaseUrl(
+      resolvePrismaDatabaseUrl(process.env.DATABASE_URL),
+    );
+    return {
+      configured: {
+        present: configured.present,
+        parseable: configured.parseable,
+        protocol: configured.protocol,
+        username: configured.username,
+        hostname: configured.hostname,
+        port: configured.port,
+        database: configured.database,
+        passwordPresent: configured.passwordPresent,
+        pgbouncer: configured.hasPgbouncer,
+        sslmodeRequire: configured.hasSslmodeRequire,
+        looksLikePooler: configured.looksLikePooler,
+      },
+      resolved: {
+        present: resolved.present,
+        parseable: resolved.parseable,
+        protocol: resolved.protocol,
+        username: resolved.username,
+        hostname: resolved.hostname,
+        port: resolved.port,
+        database: resolved.database,
+        passwordPresent: resolved.passwordPresent,
+        pgbouncer: resolved.hasPgbouncer,
+        sslmodeRequire: resolved.hasSslmodeRequire,
+        looksLikePooler: resolved.looksLikePooler,
+      },
+      lastErrorKind: this.lastConnectionErrorKind,
+      lastErrorMessage: this.lastConnectionErrorMessage,
+    };
   }
 
   async onModuleInit(): Promise<void> {
@@ -331,12 +375,20 @@ export class PrismaService
 
     try {
       await this.connectWithRetry();
+      this.lastConnectionErrorKind = null;
+      this.lastConnectionErrorMessage = null;
       this.logger.log(
         `Prisma connected (${databaseHostFingerprint()})`,
       );
     } catch (error: unknown) {
       const kind = classifyPrismaConnectionError(error);
       const message = error instanceof Error ? error.message : String(error);
+      this.lastConnectionErrorKind = kind;
+      // Keep message but never include connection strings if Prisma embeds them.
+      this.lastConnectionErrorMessage = message
+        .replace(/postgresql:\/\/[^\s]+/gi, 'postgresql://***')
+        .replace(/postgres:\/\/[^\s]+/gi, 'postgres://***')
+        .slice(0, 300);
       this.logger.error(
         `Prisma initial connect failed kind=${kind} host=${databaseHostFingerprint()}: ${message}`,
       );
@@ -372,10 +424,19 @@ export class PrismaService
         throw error;
       }
       const kind = classifyPrismaConnectionError(error);
+      this.lastConnectionErrorKind = kind;
+      this.lastConnectionErrorMessage = (
+        error instanceof Error ? error.message : String(error)
+      )
+        .replace(/postgresql:\/\/[^\s]+/gi, 'postgresql://***')
+        .replace(/postgres:\/\/[^\s]+/gi, 'postgres://***')
+        .slice(0, 300);
       this.logger.warn(
         `Prisma connectivity check failed kind=${kind}; reconnecting (${databaseHostFingerprint()})`,
       );
       await this.connectWithRetry();
+      this.lastConnectionErrorKind = null;
+      this.lastConnectionErrorMessage = null;
     }
   }
 
@@ -395,6 +456,11 @@ export class PrismaService
           const kind = classifyPrismaConnectionError(error);
           const message =
             error instanceof Error ? error.message : String(error);
+          this.lastConnectionErrorKind = kind;
+          this.lastConnectionErrorMessage = message
+            .replace(/postgresql:\/\/[^\s]+/gi, 'postgresql://***')
+            .replace(/postgres:\/\/[^\s]+/gi, 'postgres://***')
+            .slice(0, 300);
           this.logger.warn(
             `Prisma $connect attempt ${attempt}/${maxAttempts} kind=${kind}: ${message}`,
           );
