@@ -24,7 +24,8 @@ export const employeeWithRolesInclude = {
 export class AuthRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  findEmployeeByPhone(phone: string) {
+  async findEmployeeByPhone(phone: string) {
+    await this.prisma.ensureConnected();
     return this.prisma.employee.findFirst({
       where: {
         phone,
@@ -34,7 +35,8 @@ export class AuthRepository {
     });
   }
 
-  findEmployeeById(id: string) {
+  async findEmployeeById(id: string) {
+    await this.prisma.ensureConnected();
     return this.prisma.employee.findFirst({
       where: {
         id,

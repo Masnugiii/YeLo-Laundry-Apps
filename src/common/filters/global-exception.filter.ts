@@ -2,11 +2,13 @@ import {
   ArgumentsHost,
   Catch,
   ExceptionFilter,
+  HttpException,
   HttpStatus,
   Logger,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { ApiErrorResponse } from '../interfaces/api-response.interface';
+import { isPrismaConnectionError } from '../../database/prisma/prisma.service';
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
@@ -15,6 +17,49 @@ export class GlobalExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
+
+    // Prefer dedicated HttpException filters, but never leak a 500 for known HTTP errors
+    // if filter order/registration misses them.
+    if (exception instanceof HttpException) {
+      const status = exception.getStatus();
+      const exceptionResponse = exception.getResponse();
+      let message = exception.message;
+      let errors: Record<string, unknown> | unknown[] = {};
+
+      if (typeof exceptionResponse === 'string') {
+        message = exceptionResponse;
+      } else if (
+        typeof exceptionResponse === 'object' &&
+        exceptionResponse !== null
+      ) {
+        const body = exceptionResponse as Record<string, unknown>;
+        message = Array.isArray(body.message)
+          ? 'Request failed'
+          : ((body.message as string) ?? message);
+        errors = (body.error as Record<string, unknown>) ?? { statusCode: status };
+      }
+
+      response.status(status).json({
+        success: false,
+        message,
+        errors,
+      } satisfies ApiErrorResponse);
+      return;
+    }
+
+    if (isPrismaConnectionError(exception)) {
+      this.logger.error(
+        `Database unavailable: ${
+          exception instanceof Error ? exception.message : String(exception)
+        }`,
+      );
+      response.status(HttpStatus.SERVICE_UNAVAILABLE).json({
+        success: false,
+        message: 'Database temporarily unavailable. Please try again.',
+        errors: {},
+      } satisfies ApiErrorResponse);
+      return;
+    }
 
     this.logger.error(
       exception instanceof Error ? exception.message : 'Unknown error',
