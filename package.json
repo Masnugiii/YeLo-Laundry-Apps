@@ -10,6 +10,7 @@
     "start:prod": "node dist/main.js",
     "seed": "prisma db seed",
     "prisma:generate": "prisma generate",
+    "bootstrap:production-owner": "tsx scripts/bootstrap-production-owner.ts",
     "test": "jest",
     "test:settings": "jest --testPathPattern=settings|seed-settings"
   },
