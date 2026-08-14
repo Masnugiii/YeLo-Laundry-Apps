@@ -2,6 +2,7 @@ export default () => ({
   app: {
     name: process.env.APP_NAME ?? 'Yelo Laundry ERP',
     env: process.env.APP_ENV ?? 'development',
+    host: process.env.APP_HOST ?? '0.0.0.0',
     port: parseInt(process.env.APP_PORT ?? '3000', 10),
     apiPrefix: process.env.API_PREFIX ?? 'api/v1',
     corsOrigins: (process.env.CORS_ORIGINS ??
@@ -23,5 +24,8 @@ export default () => ({
   redis: {
     host: process.env.REDIS_HOST ?? 'localhost',
     port: parseInt(process.env.REDIS_PORT ?? '6379', 10),
+  },
+  dev: {
+    otpPhoneWhitelist: process.env.DEV_OTP_PHONE_WHITELIST,
   },
 });

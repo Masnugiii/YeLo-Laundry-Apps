@@ -44,6 +44,8 @@ WalletTransaction mapWalletTransaction(
     deductionReason: type == WalletTransactionType.payment
         ? json['notes'] as String?
         : null,
+    referenceNumber: json['referenceNumber'] as String?,
+    status: json['status'] as String? ?? 'Berhasil',
   );
 }
 

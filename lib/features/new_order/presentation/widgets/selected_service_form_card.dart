@@ -4,7 +4,6 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
-import 'package:yelo_laundry_erp/features/new_order/data/dummy_laundry_services.dart';
 import 'package:yelo_laundry_erp/features/new_order/models/laundry_service.dart';
 import 'package:yelo_laundry_erp/features/new_order/models/selected_service_form.dart';
 import 'package:yelo_laundry_erp/features/new_order/presentation/widgets/new_order_field_theme.dart';
@@ -18,7 +17,7 @@ class SelectedServiceFormCard extends StatefulWidget {
     required this.onServiceChanged,
     required this.onWeightChanged,
     required this.onItemQuantityChanged,
-    this.availableServices = dummyLaundryServices,
+    required this.availableServices,
     this.showDivider = true,
   });
 

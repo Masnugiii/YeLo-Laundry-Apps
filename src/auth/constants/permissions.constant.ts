@@ -4,6 +4,8 @@ export const PERMISSIONS = {
   FINANCE: 'finance',
   CUSTOMERS: 'customers',
   WALLET: 'wallet',
+  WALLET_TOPUP: 'wallet_topup',
+  WALLET_DEDUCT: 'wallet_deduct',
   LOYALTY: 'loyalty',
   ATTENDANCE: 'attendance',
   IRONING: 'ironing',
@@ -13,6 +15,7 @@ export const PERMISSIONS = {
   SETTINGS: 'settings',
   NOTIFICATION: 'notification',
   CUSTOMER_SERVICE: 'customer_service',
+  STORAGE: 'storage',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

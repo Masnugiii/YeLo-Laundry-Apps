@@ -8,6 +8,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   Min,
 } from 'class-validator';
 import { LoyaltyVoucherStatus } from '@prisma/client';
@@ -103,10 +104,14 @@ export class ManualBonusDto {
 export class CreateLoyaltyVoucherDto {
   @ApiProperty() @IsString() code!: string;
   @ApiProperty() @IsString() name!: string;
+  @IsOptional() @IsString() description?: string;
   @ApiProperty({ enum: ['PERCENTAGE', 'FIXED'] })
   @IsEnum(['PERCENTAGE', 'FIXED'])
   discountType!: 'PERCENTAGE' | 'FIXED';
   @ApiProperty() @IsNumber() @Min(0) discountValue!: number;
+  @ApiPropertyOptional({ description: 'Alias for discountValue when discountType is PERCENTAGE' })
+  @IsOptional() @IsNumber() @Min(0) discountPercent?: number;
+  @IsOptional() @IsNumber() @Min(0) maxDiscount?: number;
   @IsOptional() @IsEnum(['PERCENTAGE', 'FIXED']) cashbackType?: 'PERCENTAGE' | 'FIXED';
   @IsOptional() @IsNumber() cashbackValue?: number;
   @IsOptional() @IsNumber() cashbackMax?: number;
@@ -116,6 +121,37 @@ export class CreateLoyaltyVoucherDto {
   @IsOptional() @IsInt() usageLimit?: number;
   @IsOptional() @IsNumber() minimumTransaction?: number;
   @IsOptional() @IsEnum(LoyaltyVoucherStatus) status?: LoyaltyVoucherStatus;
+}
+
+export class UpdateLoyaltyVoucherDto {
+  @IsOptional() @IsString() code?: string;
+  @IsOptional() @IsString() name?: string;
+  @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsEnum(['PERCENTAGE', 'FIXED']) discountType?: 'PERCENTAGE' | 'FIXED';
+  @IsOptional() @IsNumber() @Min(0) discountValue?: number;
+  @ApiPropertyOptional({ description: 'Alias for discountValue when discountType is PERCENTAGE' })
+  @IsOptional() @IsNumber() @Min(0) discountPercent?: number;
+  @IsOptional() @IsNumber() @Min(0) maxDiscount?: number;
+  @IsOptional() @IsEnum(['PERCENTAGE', 'FIXED']) cashbackType?: 'PERCENTAGE' | 'FIXED';
+  @IsOptional() @IsNumber() cashbackValue?: number;
+  @IsOptional() @IsNumber() cashbackMax?: number;
+  @IsOptional() @IsInt() cashbackExpirationDays?: number;
+  @IsOptional() @Type(() => Date) @IsDate() startDate?: Date;
+  @IsOptional() @Type(() => Date) @IsDate() endDate?: Date;
+  @IsOptional() @IsInt() usageLimit?: number;
+  @IsOptional() @IsNumber() minimumTransaction?: number;
+  @IsOptional() @IsEnum(LoyaltyVoucherStatus) status?: LoyaltyVoucherStatus;
+}
+
+export class CustomerPromoQueryDto {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number = 1;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit?: number = 25;
+}
+
+export class CustomerPromoQuoteDto {
+  @IsOptional() @IsUUID() promoId?: string;
+  @IsOptional() @IsString() voucherCode?: string;
+  @ApiProperty() @IsNumber() @Min(0) subtotal!: number;
 }
 
 export class VoucherQueryDto {
@@ -135,11 +171,24 @@ export class UpdateLoyaltySettingsDto {
   @IsOptional() @IsNumber() pointPerRupiah?: number;
   @IsOptional() @IsNumber() rupiahPerPoint?: number;
   @IsOptional() @IsInt() pointExpirationDays?: number;
+  @IsOptional()
+  laundryPoint?: {
+    enabled?: boolean;
+    minimumTransaction?: number;
+    pointsPerUnit?: number;
+  };
+  @IsOptional()
+  depositPoint?: {
+    enabled?: boolean;
+    minimumDeposit?: number;
+    pointsPerMultiplier?: number;
+  };
   @IsOptional() membershipLevels?: Array<{
     code: string;
     name: string;
     minPoints: number;
     benefits: string[];
+    active?: boolean;
   }>;
   @IsOptional() cashback?: {
     enabled?: boolean;

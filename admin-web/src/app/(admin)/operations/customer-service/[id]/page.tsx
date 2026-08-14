@@ -1,13 +1,16 @@
 "use client";
 
-import Link from "next/link";
-import { useParams } from "next/navigation";
 import { FormEvent, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import {
+  CustomerServiceCategoryBadge,
+  CustomerServiceStatusBadge,
+} from "@/components/customer-service/customer-service-badges";
+import {
+  CustomerServiceDetailSkeleton,
   EmptyState,
-  FinanceListSkeleton,
   QueryErrorState,
-} from "@/components/finance/list-states";
+} from "@/components/customer-service/list-states";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -40,7 +43,11 @@ const CATEGORIES: CustomerServiceCategory[] = [
   "LAINNYA",
 ];
 
+const selectClassName =
+  "h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none ring-blue-500 focus:ring-2 dark:border-slate-700 dark:bg-slate-900";
+
 export default function CustomerServiceDetailPage() {
+  const router = useRouter();
   const params = useParams<{ id: string }>();
   const ticketId = params.id;
   const ticketQuery = useCustomerServiceTicket(ticketId);
@@ -58,7 +65,7 @@ export default function CustomerServiceDetailPage() {
   };
 
   if (ticketQuery.isLoading) {
-    return <FinanceListSkeleton />;
+    return <CustomerServiceDetailSkeleton />;
   }
 
   if (ticketQuery.isError) {
@@ -81,18 +88,15 @@ export default function CustomerServiceDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">{ticket.customerName}</h1>
-          <p className="text-sm text-muted-foreground">{ticket.whatsappNumber}</p>
+          <p className="text-lg font-semibold">{ticket.customerName}</p>
+          <p className="text-sm text-slate-500">{ticket.whatsappNumber}</p>
         </div>
-        <Link
-          href="/operations/customer-service"
-          className="inline-flex h-10 items-center rounded-md border border-input px-4 text-sm hover:bg-muted"
-        >
+        <Button variant="outline" onClick={() => router.push("/operations/customer-service")}>
           Back to list
-        </Link>
+        </Button>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -102,12 +106,10 @@ export default function CustomerServiceDetailPage() {
             <p>
               <span className="font-medium">Subject:</span> {ticket.subject}
             </p>
-            <p>
-              <span className="font-medium">Status:</span> {ticket.status}
-            </p>
-            <p>
-              <span className="font-medium">Category:</span> {ticket.category}
-            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <CustomerServiceStatusBadge status={ticket.status} />
+              <CustomerServiceCategoryBadge category={ticket.category} />
+            </div>
             <p>
               <span className="font-medium">AI Summary:</span> {ticket.aiSummary}
             </p>
@@ -121,23 +123,25 @@ export default function CustomerServiceDetailPage() {
 
           <div className="mt-4 space-y-3">
             <select
-              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              className={selectClassName}
               value={ticket.status}
+              disabled={updateMutation.isPending}
               onChange={(event) =>
                 updateMutation.mutate({
                   status: event.target.value as CustomerServiceStatus,
                 })
               }
             >
-              {STATUSES.map((status) => (
-                <option key={status} value={status}>
-                  {status}
+              {STATUSES.map((item) => (
+                <option key={item} value={item}>
+                  {item.replaceAll("_", " ")}
                 </option>
               ))}
             </select>
             <select
-              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              className={selectClassName}
               value={ticket.category}
+              disabled={updateMutation.isPending}
               onChange={(event) =>
                 updateMutation.mutate({
                   category: event.target.value as CustomerServiceCategory,
@@ -146,7 +150,7 @@ export default function CustomerServiceDetailPage() {
             >
               {CATEGORIES.map((category) => (
                 <option key={category} value={category}>
-                  {category}
+                  {category.replaceAll("_", " ")}
                 </option>
               ))}
             </select>
@@ -156,14 +160,19 @@ export default function CustomerServiceDetailPage() {
         <Card className="p-4 lg:col-span-2">
           <CardTitle className="mb-3">Messages</CardTitle>
           {ticket.messages.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No messages yet.</p>
+            <EmptyState
+              title="No messages yet"
+              description="Customer messages will appear here."
+            />
           ) : (
             <div className="space-y-3">
               {ticket.messages.map((message) => (
                 <div
                   key={message.id}
-                  className={`rounded-md border p-3 text-sm ${
-                    message.isFromCustomer ? "bg-muted/30" : "bg-background"
+                  className={`rounded-lg border p-3 text-sm ${
+                    message.isFromCustomer
+                      ? "border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900/60"
+                      : "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950"
                   }`}
                 >
                   <div className="mb-1 flex items-center justify-between gap-2">
@@ -172,7 +181,7 @@ export default function CustomerServiceDetailPage() {
                         ? ticket.customerName
                         : message.employeeName ?? "Employee"}
                     </span>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-xs text-slate-500">
                       {formatDate(message.createdAt)}
                     </span>
                   </div>
@@ -187,6 +196,7 @@ export default function CustomerServiceDetailPage() {
               placeholder="Type a reply..."
               value={reply}
               onChange={(event) => setReply(event.target.value)}
+              disabled={replyMutation.isPending}
             />
             <Button type="submit" disabled={replyMutation.isPending}>
               Send

@@ -36,6 +36,10 @@ class EnvironmentVariables {
   @IsOptional()
   APP_NAME?: string;
 
+  @IsString()
+  @IsOptional()
+  APP_HOST?: string;
+
   @Type(() => Number)
   @IsNumber()
   @Min(1)
@@ -70,6 +74,10 @@ class EnvironmentVariables {
   @IsString()
   @IsOptional()
   BODY_LIMIT?: string;
+
+  @IsString()
+  @IsOptional()
+  DEV_OTP_PHONE_WHITELIST?: string;
 }
 
 export function validateEnv(config: Record<string, unknown>) {

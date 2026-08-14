@@ -14,7 +14,12 @@ import 'package:yelo_laundry_erp/shared/widgets/api_state_widgets.dart';
 import 'package:yelo_laundry_erp/shared/widgets/selectable_chip.dart';
 
 class PickupDeliveryScreen extends ConsumerStatefulWidget {
-  const PickupDeliveryScreen({super.key});
+  const PickupDeliveryScreen({
+    super.key,
+    this.showBackButton = true,
+  });
+
+  final bool showBackButton;
 
   @override
   ConsumerState<PickupDeliveryScreen> createState() =>
@@ -134,6 +139,7 @@ class _PickupDeliveryScreenState extends ConsumerState<PickupDeliveryScreen> {
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.onPrimary,
         elevation: 0,
+        automaticallyImplyLeading: widget.showBackButton,
         iconTheme: const IconThemeData(color: AppColors.onPrimary),
         title: Text(
           'Pickup & Delivery',

@@ -33,7 +33,7 @@ class LaundryProfileSourceInfoCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Data Bersumber dari Profil Laundry',
+                  'Data Bersumber dari Profil Perusahaan',
                   style: GoogleFonts.poppins(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
@@ -42,9 +42,9 @@ class LaundryProfileSourceInfoCard extends StatelessWidget {
                 ),
                 const SizedBox(height: AppSpacing.s8),
                 Text(
-                  'Informasi seperti alamat, nomor WhatsApp, Instagram, dan website '
-                  'diambil secara otomatis dari menu Profil Laundry.\n\n'
-                  'Untuk mengubah informasi tersebut, silakan perbarui data pada menu Profil Laundry.',
+                  'Informasi seperti nama, alamat, dan nomor telepon '
+                  'diambil secara otomatis dari menu Profil Perusahaan.\n\n'
+                  'Untuk mengubah informasi tersebut, silakan perbarui data pada menu Profil Perusahaan.',
                   style: GoogleFonts.poppins(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,

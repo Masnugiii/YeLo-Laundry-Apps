@@ -3,13 +3,16 @@ import { Gender } from '@prisma/client';
 import {
   IsEmail,
   IsEnum,
+  IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
   IsUUID,
   Length,
   Matches,
+  Max,
   MaxLength,
+  Min,
 } from 'class-validator';
 
 const PHONE_PATTERN = /^(\+62|62|0)8[1-9][0-9]{6,11}$/;
@@ -46,4 +49,16 @@ export class CustomerRegisterDto {
   @IsOptional()
   @IsEnum(Gender)
   gender?: Gender;
+
+  @ApiProperty({ example: 35 })
+  @IsInt()
+  @Min(13)
+  @Max(100)
+  age!: number;
+
+  @ApiProperty({ example: 'Ibu Rumah Tangga' })
+  @IsNotEmpty()
+  @IsString()
+  @MaxLength(100)
+  occupation!: string;
 }

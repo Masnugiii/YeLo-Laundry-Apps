@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
-import 'package:yelo_laundry_erp/features/settings/models/reminder_recipient_employee.dart';
 import 'package:yelo_laundry_erp/features/settings/models/settings_models.dart';
 import 'package:yelo_laundry_erp/features/settings/presentation/settings_theme.dart';
 import 'package:yelo_laundry_erp/features/settings/presentation/widgets/employee_recipient_card.dart';
 import 'package:yelo_laundry_erp/features/settings/presentation/widgets/reminder_recipient_info_card.dart';
+import 'package:yelo_laundry_erp/features/settings/providers/reminder_recipient_provider.dart';
+import 'package:yelo_laundry_erp/shared/widgets/api_state_widgets.dart';
 
-class ReminderRecipientSection extends StatelessWidget {
+class ReminderRecipientSection extends ConsumerWidget {
   const ReminderRecipientSection({
     super.key,
     required this.settings,
@@ -31,7 +33,9 @@ class ReminderRecipientSection extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final employeesAsync = ref.watch(reminderRecipientEmployeesProvider);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -50,18 +54,40 @@ class ReminderRecipientSection extends StatelessWidget {
           style: SettingsTheme.tileDescriptionStyle.copyWith(fontSize: 13),
         ),
         const SizedBox(height: AppSpacing.s16),
-        for (var i = 0; i < dummyReminderRecipientEmployees.length; i++) ...[
-          if (i > 0) const SizedBox(height: AppSpacing.s12),
-          EmployeeRecipientCard(
-            employee: dummyReminderRecipientEmployees[i],
-            isSelected: settings.resolvedSelectedReminderRecipientIds
-                .contains(dummyReminderRecipientEmployees[i].id),
-            onSelectedChanged: (value) => _toggleEmployee(
-              dummyReminderRecipientEmployees[i].id,
-              value,
-            ),
+        employeesAsync.when(
+          loading: () => const ApiLoadingView(
+            message: 'Memuat daftar karyawan...',
           ),
-        ],
+          error: (error, _) => ApiErrorView(
+            message: messageFromError(error),
+            onRetry: () => ref.invalidate(reminderRecipientEmployeesProvider),
+          ),
+          data: (employees) {
+            if (employees.isEmpty) {
+              return Text(
+                'Belum ada karyawan Owner/Manajer aktif.',
+                style: SettingsTheme.tileDescriptionStyle,
+              );
+            }
+
+            return Column(
+              children: [
+                for (var i = 0; i < employees.length; i++) ...[
+                  if (i > 0) const SizedBox(height: AppSpacing.s12),
+                  EmployeeRecipientCard(
+                    employee: employees[i],
+                    isSelected: settings.resolvedSelectedReminderRecipientIds
+                        .contains(employees[i].id),
+                    onSelectedChanged: (value) => _toggleEmployee(
+                      employees[i].id,
+                      value,
+                    ),
+                  ),
+                ],
+              ],
+            );
+          },
+        ),
         const SizedBox(height: AppSpacing.s16),
         const ReminderRecipientInfoCard(),
         const SizedBox(height: AppSpacing.s16),

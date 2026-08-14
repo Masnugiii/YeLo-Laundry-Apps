@@ -28,6 +28,7 @@ export const ticketListSelect = {
 
 export const ticketDetailSelect = {
   id: true,
+  orderId: true,
   subject: true,
   status: true,
   priority: true,

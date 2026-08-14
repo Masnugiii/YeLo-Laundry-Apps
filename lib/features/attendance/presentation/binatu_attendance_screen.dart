@@ -4,29 +4,25 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
-import 'package:yelo_laundry_erp/core/providers/core_providers.dart';
 import 'package:yelo_laundry_erp/features/attendance/presentation/binatu_attendance_history_screen.dart';
 import 'package:yelo_laundry_erp/features/attendance/presentation/widgets/binatu_attendance_cards.dart';
 import 'package:yelo_laundry_erp/features/attendance/providers/binatu_attendance_provider.dart';
+import 'package:yelo_laundry_erp/features/dashboard/presentation/widgets/back_to_dashboard_link.dart';
 import 'package:yelo_laundry_erp/shared/widgets/api_state_widgets.dart';
 
 class BinatuAttendanceScreen extends ConsumerWidget {
   const BinatuAttendanceScreen({
     super.key,
     this.showBackButton = true,
+    this.showBackToDashboard = false,
   });
 
   final bool showBackButton;
-
-  static const _locationPayload = {
-    'latitude': -6.2088,
-    'longitude': 106.8456,
-    'accuracy': 10.0,
-  };
+  final bool showBackToDashboard;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final attendance = ref.watch(binatuAttendanceProvider);
+    final attendanceState = ref.watch(binatuAttendanceProvider);
 
     return Scaffold(
       backgroundColor: AppColors.dashboardBackground,
@@ -34,7 +30,11 @@ class BinatuAttendanceScreen extends ConsumerWidget {
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.onPrimary,
         elevation: 0,
-        automaticallyImplyLeading: showBackButton,
+        automaticallyImplyLeading:
+            showBackButton && !showBackToDashboard,
+        leading: showBackToDashboard
+            ? const DashboardAppBarBackButton()
+            : null,
         iconTheme: const IconThemeData(color: AppColors.onPrimary),
         title: Text(
           'Kehadiran',
@@ -45,118 +45,122 @@ class BinatuAttendanceScreen extends ConsumerWidget {
           ),
         ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.s20,
-          AppSpacing.s20,
-          AppSpacing.s20,
-          AppSpacing.s32,
+      body: attendanceState.when(
+        loading: () => const ApiLoadingView(message: 'Memuat kehadiran...'),
+        error: (error, _) => ApiErrorView(
+          message: messageFromError(error),
+          onRetry: () => ref.invalidate(binatuAttendanceProvider),
         ),
-        children: [
-          BinatuAttendanceProfileCard(profile: attendance.profile),
-          const SizedBox(height: AppSpacing.s16),
-          BinatuTodayAttendanceCard(today: attendance.today),
-          const SizedBox(height: AppSpacing.s16),
-          BinatuEpposReadyCard(deviceId: attendance.epposDeviceId),
-          const SizedBox(height: AppSpacing.s24),
-          Row(
-            children: [
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: attendance.canCheckIn
-                      ? () => _handleCheckIn(context, ref)
-                      : null,
-                  icon: const Icon(Icons.login),
-                  label: Text(
-                    'Check In',
-                    style: GoogleFonts.poppins(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: AppColors.onPrimary,
-                    disabledBackgroundColor:
-                        AppColors.primary.withValues(alpha: 0.35),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.s12),
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: attendance.canCheckOut
-                      ? () => _handleCheckOut(context, ref)
-                      : null,
-                  icon: const Icon(Icons.logout),
-                  label: Text(
-                    'Check Out',
-                    style: GoogleFonts.poppins(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.accent,
-                    foregroundColor: AppColors.primary,
-                    disabledBackgroundColor:
-                        AppColors.accent.withValues(alpha: 0.35),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+        data: (attendance) => ListView(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.s20,
+            AppSpacing.s20,
+            AppSpacing.s20,
+            AppSpacing.s32,
           ),
-          const SizedBox(height: AppSpacing.s12),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (context) => BinatuAttendanceHistoryScreen(
-                      history: attendance.history,
-                      employeeName: attendance.profile.name,
+          children: [
+            BinatuAttendanceProfileCard(profile: attendance.profile),
+            const SizedBox(height: AppSpacing.s16),
+            BinatuTodayAttendanceCard(today: attendance.today),
+            const SizedBox(height: AppSpacing.s16),
+            BinatuEpposReadyCard(deviceId: attendance.epposDeviceId),
+            const SizedBox(height: AppSpacing.s24),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: attendance.canCheckIn
+                        ? () => _handleCheckIn(context, ref)
+                        : null,
+                    icon: const Icon(Icons.login),
+                    label: Text(
+                      'Check In',
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: AppColors.onPrimary,
+                      disabledBackgroundColor:
+                          AppColors.primary.withValues(alpha: 0.35),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
                     ),
                   ),
-                );
-              },
-              icon: const Icon(Icons.history, color: AppColors.primary),
-              label: Text(
-                'Attendance History',
-                style: GoogleFonts.poppins(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.primary,
                 ),
-              ),
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: AppColors.primary, width: 1.5),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+                const SizedBox(width: AppSpacing.s12),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: attendance.canCheckOut
+                        ? () => _handleCheckOut(context, ref)
+                        : null,
+                    icon: const Icon(Icons.logout),
+                    label: Text(
+                      'Check Out',
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.accent,
+                      foregroundColor: AppColors.primary,
+                      disabledBackgroundColor:
+                          AppColors.accent.withValues(alpha: 0.35),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.s12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (context) => BinatuAttendanceHistoryScreen(
+                        history: attendance.history,
+                        employeeName: attendance.profile.name,
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.history, color: AppColors.primary),
+                label: Text(
+                  'Riwayat Kehadiran',
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primary,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppColors.primary, width: 1.5),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   Future<void> _handleCheckIn(BuildContext context, WidgetRef ref) async {
     try {
-      await ref
-          .read(attendanceRepositoryProvider)
-          .checkIn(_locationPayload);
-      ref.read(binatuAttendanceProvider.notifier).checkIn();
+      await ref.read(binatuAttendanceProvider.notifier).checkIn();
       if (context.mounted) {
         _showSnackBar(context, 'Check In berhasil dicatat.');
       }
@@ -173,10 +177,7 @@ class BinatuAttendanceScreen extends ConsumerWidget {
 
   Future<void> _handleCheckOut(BuildContext context, WidgetRef ref) async {
     try {
-      await ref
-          .read(attendanceRepositoryProvider)
-          .checkOut(_locationPayload);
-      ref.read(binatuAttendanceProvider.notifier).checkOut();
+      await ref.read(binatuAttendanceProvider.notifier).checkOut();
       if (context.mounted) {
         _showSnackBar(context, 'Check Out berhasil dicatat.');
       }

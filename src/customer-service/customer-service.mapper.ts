@@ -132,3 +132,50 @@ export function toTicketDetail(
 export function mapOrderStatus(status: OrderStatus): string {
   return ORDER_STATUS_LABELS[status] ?? status;
 }
+
+export interface CustomerOrderFeedbackMessage {
+  id: string;
+  senderType: SenderType;
+  senderLabel: string;
+  message: string;
+  createdAt: string;
+}
+
+export interface CustomerOrderFeedback {
+  orderId: string;
+  ticketId: string | null;
+  status: TicketStatus | null;
+  messages: CustomerOrderFeedbackMessage[];
+}
+
+export function toCustomerOrderFeedback(
+  orderId: string,
+  ticket: TicketDetailRecord | null,
+): CustomerOrderFeedback {
+  if (!ticket) {
+    return {
+      orderId,
+      ticketId: null,
+      status: null,
+      messages: [],
+    };
+  }
+
+  return {
+    orderId,
+    ticketId: ticket.id,
+    status: ticket.status,
+    messages: ticket.messages.map((message) => ({
+      id: message.id,
+      senderType: message.senderType,
+      senderLabel:
+        message.senderType === SenderType.CUSTOMER
+          ? 'Anda'
+          : message.senderType === SenderType.SYSTEM
+            ? 'Sistem'
+            : 'Yelo',
+      message: message.message,
+      createdAt: message.createdAt.toISOString(),
+    })),
+  };
+}

@@ -33,15 +33,18 @@ class OwnerDashboardScreen extends StatelessWidget {
         const CustomersScreen(
           key: ValueKey('owner-dashboard-customers'),
           showBackButton: false,
+          showBackToDashboard: true,
         ),
         const IncomingOrdersScreen(
           key: ValueKey('owner-dashboard-orders'),
           showBackButton: false,
+          showBackToDashboard: true,
           title: 'Order',
         ),
         const SettingsScreen(
           key: ValueKey('owner-dashboard-settings'),
           showBackButton: false,
+          showBackToDashboard: true,
         ),
       ],
     );
@@ -116,7 +119,7 @@ class _OwnerBerandaPage extends ConsumerWidget {
                       ),
                       const SizedBox(height: AppSpacing.s16),
                       PosFinancialKpiCard(
-                        title: 'Belum Dibayar',
+                        title: 'Belum Bayar',
                         value: _formatCurrency(finance['outstandingPayment']),
                         subtitle: 'Total order yang masih belum dilunasi.',
                         onTap: () => context.push('/unpaid-orders'),
@@ -189,6 +192,11 @@ class _OwnerBerandaPage extends ConsumerWidget {
                         title: 'Customer Service Center',
                         icon: Icons.support_agent_outlined,
                         onTap: () => context.push('/customer-service'),
+                      ),
+                      PosMenuCard(
+                        title: 'Laci Laundry',
+                        icon: Icons.inventory_2_outlined,
+                        onTap: () => context.push('/laci-laundry'),
                       ),
                     ],
                   ),

@@ -216,7 +216,7 @@ class _DocumentsSettingsScreenState
               ),
               const SizedBox(height: AppSpacing.s16),
               DropdownButtonFormField<String>(
-                value: form.compressionMode,
+                initialValue: form.compressionMode,
                 decoration: InputDecoration(
                   labelText: 'Compression mode',
                   border: OutlineInputBorder(
@@ -346,7 +346,7 @@ class _BackupSettingsScreenState extends ConsumerState<BackupSettingsScreen> {
               ),
               const SizedBox(height: AppSpacing.s12),
               DropdownButtonFormField<String>(
-                value: form.schedule,
+                initialValue: form.schedule,
                 decoration: InputDecoration(
                   labelText: 'Schedule',
                   border: OutlineInputBorder(

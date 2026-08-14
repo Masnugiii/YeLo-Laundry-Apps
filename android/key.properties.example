@@ -1,0 +1,7 @@
+# Copy to key.properties and fill with production values.
+# NEVER commit key.properties or keystore files.
+
+storeFile=<PATH_TO_PRODUCTION_KEYSTORE>
+storePassword=<PRODUCTION_SECRET>
+keyAlias=<PRODUCTION_ALIAS>
+keyPassword=<PRODUCTION_SECRET>

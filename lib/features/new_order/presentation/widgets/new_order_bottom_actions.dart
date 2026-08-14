@@ -8,13 +8,15 @@ class NewOrderBottomActions extends StatelessWidget {
   const NewOrderBottomActions({
     super.key,
     required this.showWhatsAppShare,
-    required this.onSaveOrder,
+    required this.onContinueOrder,
     required this.onPrintReceipt,
     required this.onShareWhatsApp,
+    this.isLoading = false,
   });
 
   final bool showWhatsAppShare;
-  final VoidCallback onSaveOrder;
+  final bool isLoading;
+  final VoidCallback onContinueOrder;
   final VoidCallback onPrintReceipt;
   final VoidCallback onShareWhatsApp;
 
@@ -43,7 +45,7 @@ class NewOrderBottomActions extends StatelessWidget {
           SizedBox(
             height: 52,
             child: FilledButton(
-              onPressed: onSaveOrder,
+              onPressed: isLoading ? null : onContinueOrder,
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: AppColors.onPrimary,
@@ -51,13 +53,22 @@ class NewOrderBottomActions extends StatelessWidget {
                   borderRadius: BorderRadius.circular(16),
                 ),
               ),
-              child: Text(
-                'Simpan Order',
-                style: GoogleFonts.poppins(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+              child: isLoading
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.onPrimary,
+                      ),
+                    )
+                  : Text(
+                      'Lanjutkan Order',
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
             ),
           ),
           const SizedBox(height: AppSpacing.s12),

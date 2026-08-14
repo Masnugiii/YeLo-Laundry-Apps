@@ -1,14 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:yelo_laundry_erp/core/providers/core_providers.dart';
+import 'package:yelo_laundry_erp/core/utils/date_display_helper.dart';
 import 'package:yelo_laundry_erp/features/orders/models/incoming_order.dart';
 
-String _todayDateParam() {
-  final now = DateTime.now();
-  final month = now.month.toString().padLeft(2, '0');
-  final day = now.day.toString().padLeft(2, '0');
-  return '${now.year}-$month-$day';
-}
+String _todayDateParam() => DateDisplayHelper.todayApiDateParam();
 
 class UnpaidOrdersNotifier extends AsyncNotifier<List<IncomingOrder>> {
   @override

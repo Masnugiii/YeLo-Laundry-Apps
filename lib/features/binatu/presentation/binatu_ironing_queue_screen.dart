@@ -8,6 +8,7 @@ import 'package:yelo_laundry_erp/features/binatu/models/binatu_ironing_status.da
 import 'package:yelo_laundry_erp/features/binatu/presentation/widgets/binatu_ironing_order_card.dart';
 import 'package:yelo_laundry_erp/features/binatu/providers/binatu_dashboard_badge_provider.dart';
 import 'package:yelo_laundry_erp/features/binatu/providers/binatu_order_provider.dart';
+import 'package:yelo_laundry_erp/features/dashboard/presentation/widgets/back_to_dashboard_link.dart';
 import 'package:yelo_laundry_erp/shared/widgets/api_state_widgets.dart';
 import 'package:yelo_laundry_erp/shared/widgets/selectable_chip.dart';
 
@@ -15,9 +16,11 @@ class BinatuIroningQueueScreen extends ConsumerStatefulWidget {
   const BinatuIroningQueueScreen({
     super.key,
     this.showBackButton = true,
+    this.showBackToDashboard = false,
   });
 
   final bool showBackButton;
+  final bool showBackToDashboard;
 
   @override
   ConsumerState<BinatuIroningQueueScreen> createState() =>
@@ -46,7 +49,11 @@ class _BinatuIroningQueueScreenState
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.onPrimary,
         elevation: 0,
-        automaticallyImplyLeading: widget.showBackButton,
+        automaticallyImplyLeading:
+            widget.showBackButton && !widget.showBackToDashboard,
+        leading: widget.showBackToDashboard
+            ? const DashboardAppBarBackButton()
+            : null,
         iconTheme: const IconThemeData(color: AppColors.onPrimary),
         title: Text(
           filter.label,

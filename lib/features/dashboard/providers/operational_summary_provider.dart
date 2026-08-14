@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:yelo_laundry_erp/core/providers/core_providers.dart';
+import 'package:yelo_laundry_erp/core/role/staff_permissions.dart';
+import 'package:yelo_laundry_erp/core/session/session_provider.dart';
 
 class OperationalSummary {
   const OperationalSummary({
@@ -40,10 +42,24 @@ int computeLaundryInProgress(Map<String, dynamic> laundry) {
 
 final operationalSummaryProvider =
     FutureProvider<OperationalSummary>((ref) async {
+  final permissions = StaffPermissions(ref.watch(sessionProvider).permissions);
+
+  final ordersFuture = permissions.orders
+      ? ref.read(orderRepositoryProvider).fetchStatistics()
+      : Future<Map<String, dynamic>>.value(const {});
+
+  final laundryFuture = permissions.ironing
+      ? ref.read(laundryRepositoryProvider).fetchDashboard()
+      : Future<Map<String, dynamic>>.value(const {});
+
+  final financeFuture = permissions.finance
+      ? ref.read(financeRepositoryProvider).fetchDashboard()
+      : Future<Map<String, dynamic>>.value(const {});
+
   final results = await Future.wait([
-    ref.read(orderRepositoryProvider).fetchStatistics(),
-    ref.read(laundryRepositoryProvider).fetchDashboard(),
-    ref.read(financeRepositoryProvider).fetchDashboard(),
+    ordersFuture,
+    laundryFuture,
+    financeFuture,
   ]);
 
   final orders = results[0];

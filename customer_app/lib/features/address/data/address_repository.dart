@@ -1,3 +1,5 @@
+import 'package:yelo_laundry_customer/core/dev/dev_preview_data.dart';
+import 'package:yelo_laundry_customer/core/dev/dev_preview_gate.dart';
 import 'package:yelo_laundry_customer/core/network/api_client.dart';
 
 class CustomerAddress {
@@ -75,6 +77,10 @@ class AddressRepository {
   final ApiClient _api;
 
   Future<List<CustomerAddress>> list(String customerId) async {
+    if (DevPreviewGate.isActive) {
+      return DevPreviewData.addresses;
+    }
+
     final data = await _api.get<List<dynamic>>(
       '/customers/$customerId/addresses',
       parser: (json) => json as List<dynamic>,

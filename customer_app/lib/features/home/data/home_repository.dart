@@ -1,3 +1,5 @@
+import 'package:yelo_laundry_customer/core/dev/dev_preview_data.dart';
+import 'package:yelo_laundry_customer/core/dev/dev_preview_gate.dart';
 import 'package:yelo_laundry_customer/core/network/api_client.dart';
 
 class DashboardData {
@@ -66,6 +68,10 @@ class HomeRepository {
   final ApiClient _api;
 
   Future<DashboardData> getDashboard() async {
+    if (DevPreviewGate.isActive) {
+      return DevPreviewData.dashboard;
+    }
+
     final data = await _api.get<Map<String, dynamic>>(
       '/customer-app/dashboard',
       parser: (json) => json as Map<String, dynamic>,

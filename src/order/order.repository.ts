@@ -35,6 +35,10 @@ export interface CreateOrderInput {
   notes?: string | null;
   createdByEmployeeId: string;
   items: CreateOrderItemInput[];
+  afterCreate?: (
+    tx: Prisma.TransactionClient,
+    orderId: string,
+  ) => Promise<void>;
 }
 
 @Injectable()
@@ -83,6 +87,7 @@ export class OrderRepository {
       where: { id: serviceId, isActive: true, deletedAt: null },
       select: {
         id: true,
+        serviceCode: true,
         serviceName: true,
         unitType: true,
         weight: true,
@@ -168,6 +173,10 @@ export class OrderRepository {
           employeeId: input.createdByEmployeeId,
         },
       });
+
+      if (input.afterCreate) {
+        await input.afterCreate(tx, order.id);
+      }
 
       const detail = await tx.order.findUniqueOrThrow({
         where: { id: order.id },

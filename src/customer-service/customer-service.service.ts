@@ -9,7 +9,9 @@ import {
   CsSummary,
   CsTicketDetail,
   CsTicketListItem,
+  CustomerOrderFeedback,
   mapOrderStatus,
+  toCustomerOrderFeedback,
   toTicketDetail,
   toTicketListItem,
 } from './customer-service.mapper';
@@ -105,7 +107,7 @@ export class CustomerServiceService {
       throw new NotFoundException('Customer service ticket not found');
     }
 
-    const relatedOrder = await this.buildRelatedOrder(ticket.customer.id);
+    const relatedOrder = await this.buildRelatedOrder(ticket);
 
     return {
       success: true,
@@ -150,7 +152,7 @@ export class CustomerServiceService {
       updatedAt: new Date(),
     });
 
-    const relatedOrder = await this.buildRelatedOrder(updated.customer.id);
+    const relatedOrder = await this.buildRelatedOrder(updated);
 
     return {
       success: true,
@@ -188,8 +190,133 @@ export class CustomerServiceService {
     return this.findOne(id);
   }
 
-  private async buildRelatedOrder(customerId: string) {
-    const order = await this.repository.findLatestOrderSummary(customerId);
+  async getOrderFeedback(
+    customerId: string,
+    orderId: string,
+  ): Promise<ApiSuccessResponse<CustomerOrderFeedback>> {
+    const ticket = await this.repository.findTicketByCustomerAndOrder(
+      customerId,
+      orderId,
+    );
+
+    return {
+      success: true,
+      message: 'Order feedback retrieved successfully',
+      data: toCustomerOrderFeedback(orderId, ticket),
+    };
+  }
+
+  async sendOrderFeedback(
+    customerId: string,
+    orderId: string,
+    orderNumber: string,
+    message: string,
+  ): Promise<ApiSuccessResponse<CustomerOrderFeedback>> {
+    const trimmed = message.trim();
+
+    if (!trimmed) {
+      throw new BadRequestException('Message is required');
+    }
+
+    await this.repository.createCustomerOrderFeedbackMessage({
+      customerId,
+      orderId,
+      orderNumber,
+      message: trimmed,
+    });
+
+    return this.getOrderFeedback(customerId, orderId);
+  }
+
+  async listCustomerTickets(customerId: string) {
+    const tickets = await this.repository.listCustomerTickets(customerId);
+    return {
+      success: true,
+      message: 'Support tickets retrieved successfully',
+      data: tickets,
+    };
+  }
+
+  async createCustomerTicket(
+    customerId: string,
+    category: string,
+    subject: string,
+    message: string,
+  ) {
+    const trimmedMessage = message.trim();
+    const trimmedSubject = subject.trim();
+
+    if (!trimmedMessage || !trimmedSubject) {
+      throw new BadRequestException('Subject and message are required');
+    }
+
+    const ticketId = await this.repository.createGeneralTicket({
+      customerId,
+      category,
+      subject: trimmedSubject,
+      message: trimmedMessage,
+    });
+
+    const detail = await this.repository.getCustomerTicketDetail(
+      ticketId,
+      customerId,
+    );
+
+    return {
+      success: true,
+      message: 'Support ticket created successfully',
+      data: detail,
+    };
+  }
+
+  async getCustomerTicket(customerId: string, ticketId: string) {
+    const detail = await this.repository.getCustomerTicketDetail(
+      ticketId,
+      customerId,
+    );
+
+    if (!detail) {
+      throw new NotFoundException('Support ticket not found');
+    }
+
+    return {
+      success: true,
+      message: 'Support ticket retrieved successfully',
+      data: detail,
+    };
+  }
+
+  async sendCustomerTicketMessage(
+    customerId: string,
+    ticketId: string,
+    message: string,
+  ) {
+    const trimmed = message.trim();
+
+    if (!trimmed) {
+      throw new BadRequestException('Message is required');
+    }
+
+    const created = await this.repository.addCustomerMessage({
+      ticketId,
+      customerId,
+      message: trimmed,
+    });
+
+    if (!created) {
+      throw new NotFoundException('Support ticket not found');
+    }
+
+    return this.getCustomerTicket(customerId, ticketId);
+  }
+
+  private async buildRelatedOrder(ticket: {
+    customer: { id: string };
+    orderId?: string | null;
+  }) {
+    const order = ticket.orderId
+      ? await this.repository.findOrderSummaryById(ticket.orderId)
+      : await this.repository.findLatestOrderSummary(ticket.customer.id);
 
     if (!order) {
       return null;

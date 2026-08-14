@@ -6,12 +6,10 @@ import 'package:yelo_laundry_erp/core/storage/secure_storage_service.dart';
 
 class AuthRepository {
   AuthRepository({
-    required ApiClient apiClient,
-    required SecureStorageService secureStorage,
-    required PreferencesService? preferences,
-  })  : _apiClient = apiClient,
-        _secureStorage = secureStorage,
-        _preferences = preferences;
+    required this._apiClient,
+    required this._secureStorage,
+    required this._preferences,
+  });
 
   final ApiClient _apiClient;
   final SecureStorageService _secureStorage;
@@ -33,6 +31,9 @@ class AuthRepository {
     final accessToken = data['accessToken'] as String;
     final user = data['user'] as Map<String, dynamic>;
     final roles = (user['roles'] as List<dynamic>).map((e) => e.toString()).toList();
+    final permissions = (user['permissions'] as List<dynamic>? ?? const [])
+        .map((e) => e.toString())
+        .toList();
 
     await _secureStorage.saveAccessToken(accessToken);
 
@@ -42,6 +43,7 @@ class AuthRepository {
       name: user['fullName'] as String,
       phone: user['phone'] as String,
       roles: roles,
+      permissions: permissions,
       role: mapBackendRoleToUserRole(roles),
       isAuthenticated: true,
     );
@@ -57,6 +59,9 @@ class AuthRepository {
     );
 
     final roles = (user['roles'] as List<dynamic>).map((e) => e.toString()).toList();
+    final permissions = (user['permissions'] as List<dynamic>? ?? const [])
+        .map((e) => e.toString())
+        .toList();
 
     final session = AppUserSession(
       id: user['id'] as String,
@@ -64,6 +69,7 @@ class AuthRepository {
       name: user['fullName'] as String,
       phone: user['phone'] as String,
       roles: roles,
+      permissions: permissions,
       role: mapBackendRoleToUserRole(roles),
       isAuthenticated: true,
     );

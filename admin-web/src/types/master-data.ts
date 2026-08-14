@@ -60,6 +60,8 @@ export interface CreateServiceInput {
   serviceName: string;
   description?: string;
   unitType: string;
+  weight?: boolean;
+  piece?: boolean;
   durationDay?: number;
   isActive?: boolean;
 }
@@ -69,6 +71,8 @@ export interface UpdateServiceInput {
   description?: string | null;
   isActive?: boolean;
   durationDay?: number | null;
+  serviceCode?: string;
+  unitType?: string;
 }
 
 export interface CreateServicePriceInput {
@@ -100,5 +104,29 @@ export interface CreateExpenseCategoryInput {
 export interface UpdateExpenseCategoryInput {
   name?: string;
   description?: string | null;
+  isActive?: boolean;
+}
+
+export interface LaundryPerfume {
+  id: string;
+  code: string;
+  name: string;
+  extraPrice: number | string;
+  displayOrder: number;
+  isActive: boolean;
+}
+
+export interface CreatePerfumeInput {
+  code: string;
+  name: string;
+  extraPrice?: number;
+  displayOrder?: number;
+  isActive?: boolean;
+}
+
+export interface UpdatePerfumeInput {
+  name?: string;
+  extraPrice?: number;
+  displayOrder?: number;
   isActive?: boolean;
 }

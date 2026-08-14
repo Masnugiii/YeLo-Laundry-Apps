@@ -1,4 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import { IsDate, IsOptional, IsString } from 'class-validator';
 
 export class CustomerProfileResponseDto {
   @ApiProperty()
@@ -25,6 +27,9 @@ export class CustomerProfileResponseDto {
   @ApiPropertyOptional()
   photoUrl?: string | null;
 
+  @ApiPropertyOptional()
+  occupation?: string | null;
+
   @ApiProperty()
   loyaltyPoints!: number;
 
@@ -39,6 +44,17 @@ export class UpdateCustomerProfileDto {
   @ApiPropertyOptional()
   email?: string;
 
+  @ApiPropertyOptional({ example: '1998-08-09' })
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  birthDate?: Date;
+
   @ApiPropertyOptional()
   photoUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  occupation?: string;
 }

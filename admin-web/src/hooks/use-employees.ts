@@ -14,33 +14,27 @@ import type {
   ResetEmployeePasswordInput,
   UpdateEmployeeInput,
 } from "@/types/employee";
+import {
+  EMPLOYEES_QUERY_KEY,
+  employeeDetailQueryKey,
+  employeesQueryKey,
+  isEmployeeListQueryKey,
+  patchEmployeeListItems,
+} from "@/hooks/employee-query-cache";
 
-export const EMPLOYEES_QUERY_KEY = "employees";
-
-export function employeesQueryKey(params: EmployeeListParams = {}) {
-  return [EMPLOYEES_QUERY_KEY, params] as const;
-}
-
-export function employeeDetailQueryKey(id: string) {
-  return [EMPLOYEES_QUERY_KEY, "detail", id] as const;
-}
+export { EMPLOYEES_QUERY_KEY, employeeDetailQueryKey, employeesQueryKey };
 
 function updateEmployeeInLists(
   queryClient: ReturnType<typeof useQueryClient>,
   employeeId: string,
   updater: (employee: Employee) => Employee,
 ) {
-  queryClient.setQueriesData<Paginated<Employee>>(
-    { queryKey: [EMPLOYEES_QUERY_KEY] },
-    (current) => {
-      if (!current) return current;
-      return {
-        ...current,
-        items: current.items.map((employee) =>
-          employee.id === employeeId ? updater(employee) : employee,
-        ),
-      };
+  queryClient.setQueriesData(
+    {
+      queryKey: [EMPLOYEES_QUERY_KEY],
+      predicate: (query) => isEmployeeListQueryKey(query.queryKey),
     },
+    (current) => patchEmployeeListItems(current, employeeId, updater),
   );
 }
 
@@ -107,13 +101,17 @@ export function useUpdateEmployee(id: string) {
       apiPatch<Employee>(`/employees/${id}`, input),
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: employeeDetailQueryKey(id) });
-      await queryClient.cancelQueries({ queryKey: [EMPLOYEES_QUERY_KEY] });
+      await queryClient.cancelQueries({
+        queryKey: [EMPLOYEES_QUERY_KEY],
+        predicate: (query) => isEmployeeListQueryKey(query.queryKey),
+      });
 
       const previousDetail = queryClient.getQueryData<Employee>(
         employeeDetailQueryKey(id),
       );
       const previousLists = queryClient.getQueriesData<Paginated<Employee>>({
         queryKey: [EMPLOYEES_QUERY_KEY],
+        predicate: (query) => isEmployeeListQueryKey(query.queryKey),
       });
 
       const definedPatch = Object.fromEntries(
@@ -123,6 +121,10 @@ export function useUpdateEmployee(id: string) {
       patchEmployeeCaches(queryClient, id, definedPatch);
 
       return { previousDetail, previousLists };
+    },
+    onSuccess: (employee) => {
+      queryClient.setQueryData(employeeDetailQueryKey(id), employee);
+      updateEmployeeInLists(queryClient, id, () => employee);
     },
     onError: (_error, _input, context) => {
       if (context?.previousDetail) {
@@ -134,7 +136,10 @@ export function useUpdateEmployee(id: string) {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: employeeDetailQueryKey(id) });
-      queryClient.invalidateQueries({ queryKey: [EMPLOYEES_QUERY_KEY] });
+      queryClient.invalidateQueries({
+        queryKey: [EMPLOYEES_QUERY_KEY],
+        predicate: (query) => isEmployeeListQueryKey(query.queryKey),
+      });
     },
   });
 }
@@ -147,13 +152,17 @@ export function useSetEmployeeStatus(id: string) {
       apiPatch<Employee>(`/employees/${id}`, { status }),
     onMutate: async (status) => {
       await queryClient.cancelQueries({ queryKey: employeeDetailQueryKey(id) });
-      await queryClient.cancelQueries({ queryKey: [EMPLOYEES_QUERY_KEY] });
+      await queryClient.cancelQueries({
+        queryKey: [EMPLOYEES_QUERY_KEY],
+        predicate: (query) => isEmployeeListQueryKey(query.queryKey),
+      });
 
       const previousDetail = queryClient.getQueryData<Employee>(
         employeeDetailQueryKey(id),
       );
       const previousLists = queryClient.getQueriesData<Paginated<Employee>>({
         queryKey: [EMPLOYEES_QUERY_KEY],
+        predicate: (query) => isEmployeeListQueryKey(query.queryKey),
       });
 
       patchEmployeeCaches(queryClient, id, { status });
@@ -170,7 +179,10 @@ export function useSetEmployeeStatus(id: string) {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: employeeDetailQueryKey(id) });
-      queryClient.invalidateQueries({ queryKey: [EMPLOYEES_QUERY_KEY] });
+      queryClient.invalidateQueries({
+        queryKey: [EMPLOYEES_QUERY_KEY],
+        predicate: (query) => isEmployeeListQueryKey(query.queryKey),
+      });
     },
   });
 }

@@ -2,16 +2,18 @@ import 'reflect-metadata';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import compression from 'compression';
 import { json, urlencoded } from 'express';
 import helmet from 'helmet';
+import { join } from 'path';
 import { Logger as PinoLogger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { PrismaService } from './database/prisma/prisma.service';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bufferLogs: true,
   });
 
@@ -20,6 +22,7 @@ async function bootstrap() {
   app.useLogger(logger);
 
   const port = configService.get<number>('app.port', 3000);
+  const host = configService.get<string>('app.host', '0.0.0.0');
   const apiPrefix = configService.get<string>('app.apiPrefix', 'api/v1');
   const corsOrigins = configService.get<string[]>('app.corsOrigins', []);
   const bodyLimit = configService.get<string>('app.bodyLimit', '10mb');
@@ -41,6 +44,10 @@ async function bootstrap() {
 
   app.setGlobalPrefix(apiPrefix, {
     exclude: ['health'],
+  });
+
+  app.useStaticAssets(join(process.cwd(), 'uploads'), {
+    prefix: `/${apiPrefix}/uploads`,
   });
 
   app.useGlobalPipes(
@@ -81,10 +88,11 @@ async function bootstrap() {
   const prismaService = app.get(PrismaService);
   prismaService.enableShutdownHooks(app);
 
-  await app.listen(port);
+  await app.listen(port, host);
 
-  Logger.log(`${appName} is running on port ${port}`, 'Bootstrap');
+  Logger.log(`${appName} is running on http://${host}:${port}`, 'Bootstrap');
   Logger.log(`API prefix: /${apiPrefix}`, 'Bootstrap');
+  Logger.log(`API base: http://${host}:${port}/${apiPrefix}`, 'Bootstrap');
   Logger.log(`Swagger UI: http://localhost:${port}/api`, 'Bootstrap');
   Logger.log(`Health check: http://localhost:${port}/health`, 'Bootstrap');
 }

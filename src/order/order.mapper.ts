@@ -85,6 +85,7 @@ export interface OrderDetail extends OrderListItem {
   actualFinishDate: Date | null;
   paymentMethod: string | null;
   notes: string | null;
+  customerWalletBalance?: number;
   items: OrderItemResponse[];
   timeline: OrderTimelineItem[];
   statusHistory: OrderStatusHistoryItem[];
@@ -95,6 +96,30 @@ export interface OrderDetail extends OrderListItem {
   paymentsSummary: {
     totalPaid: number;
     remaining: number;
+  };
+  storage: {
+    current: {
+      code: string;
+      lockerCode: string;
+      lockerName: string;
+      boxNumber: number;
+      displayLocker: string;
+      displayBox: string;
+    } | null;
+    last: {
+      code: string;
+      lockerCode: string;
+      lockerName: string;
+      boxNumber: number;
+      displayLocker: string;
+      displayBox: string;
+    } | null;
+    assignedAt: Date | null;
+    assignedBy: {
+      id: string;
+      fullName: string;
+      employeeCode: string;
+    } | null;
   };
   updatedAt: Date;
 }
@@ -228,6 +253,27 @@ export function toOrderListItem(order: OrderListRecord): OrderListItem {
   };
 }
 
+function mapStorageBox(
+  box:
+    | {
+        code: string;
+        boxNumber: number;
+        locker: { code: string; name: string };
+      }
+    | null
+    | undefined,
+) {
+  if (!box) return null;
+  return {
+    code: box.code,
+    lockerCode: box.locker.code,
+    lockerName: box.locker.name,
+    boxNumber: box.boxNumber,
+    displayLocker: box.locker.name,
+    displayBox: `Kotak ${String(box.boxNumber).padStart(2, '0')}`,
+  };
+}
+
 export function toOrderDetail(order: OrderDetailRecord): OrderDetail {
   const listItem = toOrderListItem(order as unknown as OrderListRecord);
   const { notes } = decodeOrderNotes(order.notes);
@@ -294,6 +340,12 @@ export function toOrderDetail(order: OrderDetailRecord): OrderDetail {
     paymentsSummary: {
       totalPaid,
       remaining: Math.max(listItem.grandTotal - totalPaid, 0),
+    },
+    storage: {
+      current: mapStorageBox(order.storageBox),
+      last: mapStorageBox(order.lastStorageBox),
+      assignedAt: order.storageAssignedAt ?? null,
+      assignedBy: order.storageAssignedBy ?? null,
     },
     updatedAt: order.updatedAt,
   };

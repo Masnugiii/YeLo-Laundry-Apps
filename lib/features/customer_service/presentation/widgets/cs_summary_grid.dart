@@ -32,7 +32,7 @@ class CsSummaryGrid extends StatelessWidget {
               child: _SummaryCard(
                 label: 'New Complaints',
                 value: '${summary.newComplaints}',
-                color: const Color(0xFFC62828),
+                color: AppColors.error,
               ),
             ),
           ],
@@ -44,7 +44,7 @@ class CsSummaryGrid extends StatelessWidget {
               child: _SummaryCard(
                 label: 'Order Questions',
                 value: '${summary.orderQuestions}',
-                color: const Color(0xFFF57F17),
+                color: AppColors.warning,
               ),
             ),
             const SizedBox(width: AppSpacing.s12),
@@ -52,7 +52,7 @@ class CsSummaryGrid extends StatelessWidget {
               child: _SummaryCard(
                 label: 'Completed',
                 value: '${summary.completed}',
-                color: const Color(0xFF2E7D32),
+                color: AppColors.success,
               ),
             ),
           ],

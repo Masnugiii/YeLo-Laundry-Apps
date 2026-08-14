@@ -109,7 +109,7 @@ extension LoginModeX on LoginMode {
         LoginMode.cashierOperational => 'Masuk sebagai Kasir - HP Operasional',
         LoginMode.cashierLaundry => 'Masuk sebagai Kasir + Binatu',
         LoginMode.cashierLaundryDriver =>
-          'Masuk sebagai Kasir + Binatu + Driver',
+          'Masuk sebagai ${UserRole.cashierLaundryDriver.label}',
         LoginMode.binatu => 'Masuk sebagai Binatu',
       };
 

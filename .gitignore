@@ -14,6 +14,8 @@ migrate_working_dir/
 .env
 .env.*
 !.env.example
+config/api/production.json
+config/api/physical-android.local.json
 
 # Node
 node_modules/
@@ -26,6 +28,7 @@ pnpm-debug.log*
 dist/
 build/
 coverage/
+uploads/
 
 # Logs
 *.log
@@ -65,3 +68,5 @@ app.*.map.json
 # Prisma local database artifacts
 prisma/*.db
 prisma/*.db-journal
+
+backups/

@@ -6,13 +6,13 @@ import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_radius.dart';
 import 'package:yelo_laundry_erp/app/theme/app_shadows.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
-import 'package:yelo_laundry_erp/features/orders/data/dummy_unpaid_orders.dart';
+import 'package:yelo_laundry_erp/features/orders/utils/unpaid_order_formatters.dart';
 import 'package:yelo_laundry_erp/features/orders/models/incoming_order.dart';
 import 'package:yelo_laundry_erp/features/orders/models/unpaid_order.dart';
 import 'package:yelo_laundry_erp/features/orders/presentation/widgets/order_badge.dart';
-import 'package:yelo_laundry_erp/features/orders/presentation/widgets/order_payment_bottom_sheet.dart';
+import 'package:yelo_laundry_erp/features/orders/presentation/widgets/order_whatsapp_receipt_dialog.dart';
+import 'package:yelo_laundry_erp/features/orders/utils/order_payment_flow_launcher.dart';
 import 'package:yelo_laundry_erp/features/settings/models/settings_models.dart';
-import 'package:yelo_laundry_erp/features/orders/models/order_payment.dart';
 
 class UnpaidOrderCard extends StatelessWidget {
   const UnpaidOrderCard({
@@ -357,6 +357,17 @@ class _ActionButtons extends StatelessWidget {
                 label: 'PIC Binatu',
                 value: order.binatuPic,
               ),
+              const SizedBox(height: AppSpacing.s20),
+              OutlinedButton.icon(
+                onPressed: () => showOrderWhatsappReceiptDialog(
+                  context,
+                  orderId: order.id,
+                  subtitle:
+                      'Kirim bukti order dengan status BELUM DIBAYAR ke customer.',
+                ),
+                icon: const Icon(Icons.chat_outlined, size: 18),
+                label: const Text('Kirim Struk via WhatsApp'),
+              ),
             ],
           );
         },
@@ -392,17 +403,10 @@ class _ActionButtons extends StatelessWidget {
       serviceDisplayName: order.service.label,
     );
 
-    final session = await showOrderPaymentBottomSheet(
+    final confirmation = await launchOrderPaymentFlow(
       context,
       order: incomingOrder,
       yeloWalletEnabled: initialAppSettings.yeloWalletEnabled,
-    );
-
-    if (!context.mounted || session == null) return;
-
-    final confirmation = await context.push<OrderPaymentConfirmation>(
-      '/order-payment/review',
-      extra: session,
     );
 
     if (!context.mounted || confirmation == null) return;
@@ -432,7 +436,7 @@ class _ActionButtons extends StatelessWidget {
           onTap: () => _showOrderDetail(context),
         ),
         _ActionButton(
-          label: 'Konfirmasi Pembayaran',
+          label: 'Proses Pembayaran',
           icon: Icons.payments_outlined,
           highlighted: true,
           onTap: () => _confirmPayment(context),
@@ -443,20 +447,14 @@ class _ActionButtons extends StatelessWidget {
           onTap: () => context.push('/laundry-receipt'),
         ),
         _ActionButton(
-          label: 'Bagikan WhatsApp',
+          label: 'Kirim Struk via WhatsApp',
           icon: Icons.chat_outlined,
-          onTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                behavior: SnackBarBehavior.floating,
-                backgroundColor: AppColors.primary,
-                content: Text(
-                  'Membuka WhatsApp untuk ${order.customerName}...',
-                  style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
-                ),
-              ),
-            );
-          },
+          onTap: () => showOrderWhatsappReceiptDialog(
+            context,
+            orderId: order.id,
+            subtitle:
+                'Kirim bukti order dengan status BELUM DIBAYAR ke customer.',
+          ),
         ),
       ],
     );

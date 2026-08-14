@@ -83,8 +83,8 @@ class ApiSkeletonList extends StatelessWidget {
     return ListView.separated(
       padding: const EdgeInsets.all(AppSpacing.s20),
       itemCount: itemCount,
-      separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.s12),
-      itemBuilder: (_, __) => Container(
+      separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.s12),
+      itemBuilder: (_, _) => Container(
         height: 88,
         decoration: BoxDecoration(
           color: Colors.white,

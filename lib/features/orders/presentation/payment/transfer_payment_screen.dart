@@ -10,6 +10,8 @@ import 'package:yelo_laundry_erp/features/orders/models/order_payment.dart';
 import 'package:yelo_laundry_erp/features/orders/presentation/payment/payment_flow_theme.dart';
 import 'package:yelo_laundry_erp/features/orders/presentation/payment/widgets/payment_summary_section.dart';
 import 'package:yelo_laundry_erp/features/orders/services/order_payment_service.dart';
+import 'package:yelo_laundry_erp/features/settings/providers/settings_provider.dart';
+import 'package:yelo_laundry_erp/shared/widgets/api_state_widgets.dart';
 
 class TransferPaymentScreen extends ConsumerStatefulWidget {
   const TransferPaymentScreen({
@@ -76,6 +78,8 @@ class _TransferPaymentScreenState extends ConsumerState<TransferPaymentScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final paymentConfigAsync = ref.watch(paymentConfigProvider);
+
     return Scaffold(
       backgroundColor: AppColors.dashboardBackground,
       appBar: AppBar(
@@ -92,83 +96,109 @@ class _TransferPaymentScreenState extends ConsumerState<TransferPaymentScreen> {
           ),
         ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.s20,
-          AppSpacing.s20,
-          AppSpacing.s20,
-          AppSpacing.s32,
+      body: paymentConfigAsync.when(
+        loading: () => const ApiLoadingView(message: 'Memuat data pembayaran...'),
+        error: (error, _) => ApiErrorView(
+          message: messageFromError(error),
+          onRetry: () => ref.invalidate(paymentConfigProvider),
         ),
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(AppSpacing.s20),
-            decoration: PaymentFlowTheme.cardDecoration,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Transfer Bank',
-                  style: PaymentFlowTheme.sectionTitleStyle,
-                ),
-                const SizedBox(height: AppSpacing.s16),
-                PaymentInfoRow(
-                  label: 'Bank',
-                  value: dummyTransferBankName,
-                ),
-                const SizedBox(height: AppSpacing.s8),
-                PaymentInfoRow(
-                  label: 'Account Number',
-                  value: dummyTransferAccountNumber,
-                ),
-                const SizedBox(height: AppSpacing.s8),
-                PaymentInfoRow(
-                  label: 'Account Name',
-                  value: dummyTransferAccountName,
-                ),
-                const SizedBox(height: AppSpacing.s16),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.s12,
-                    vertical: AppSpacing.s8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE3F2FD),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    'Status: Menunggu Konfirmasi Pembayaran',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.poppins(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                ),
-              ],
+        data: (config) {
+          final bankTransfer =
+              config['bankTransfer'] as Map<String, dynamic>? ?? const {};
+          final bankName = bankTransfer['bankName'] as String? ?? '';
+          final accountNumber = bankTransfer['accountNumber'] as String? ?? '';
+          final accountHolder = bankTransfer['accountHolder'] as String? ?? '';
+          final isActive = bankTransfer['isActive'] as bool? ?? false;
+
+          if (!isActive ||
+              (bankName.isEmpty &&
+                  accountNumber.isEmpty &&
+                  accountHolder.isEmpty)) {
+            return const ApiErrorView(
+              message:
+                  'Konfigurasi transfer bank belum tersedia. Hubungi owner/manager.',
+            );
+          }
+
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.s20,
+              AppSpacing.s20,
+              AppSpacing.s20,
+              AppSpacing.s32,
             ),
-          ),
-          const SizedBox(height: AppSpacing.s24),
-          FilledButton(
-            onPressed: _isSubmitting ? null : _completePayment,
-            style: PaymentFlowTheme.primaryButtonStyle,
-            child: _isSubmitting
-                ? const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppColors.onPrimary,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(AppSpacing.s20),
+                decoration: PaymentFlowTheme.cardDecoration,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Transfer Bank',
+                      style: PaymentFlowTheme.sectionTitleStyle,
                     ),
-                  )
-                : Text(
-                    'Saya Sudah Menerima Transfer',
-                    style: PaymentFlowTheme.primaryButtonTextStyle,
-                  ),
-          ),
-        ],
+                    const SizedBox(height: AppSpacing.s16),
+                    PaymentInfoRow(
+                      label: 'Bank',
+                      value: bankName.isNotEmpty ? bankName : '—',
+                    ),
+                    const SizedBox(height: AppSpacing.s8),
+                    PaymentInfoRow(
+                      label: 'Account Number',
+                      value: accountNumber.isNotEmpty ? accountNumber : '—',
+                    ),
+                    const SizedBox(height: AppSpacing.s8),
+                    PaymentInfoRow(
+                      label: 'Account Name',
+                      value: accountHolder.isNotEmpty ? accountHolder : '—',
+                    ),
+                    const SizedBox(height: AppSpacing.s16),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.s12,
+                        vertical: AppSpacing.s8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE3F2FD),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        'Status: Menunggu Konfirmasi Pembayaran',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppSpacing.s24),
+              FilledButton(
+                onPressed: _isSubmitting ? null : _completePayment,
+                style: PaymentFlowTheme.primaryButtonStyle,
+                child: _isSubmitting
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.onPrimary,
+                        ),
+                      )
+                    : Text(
+                        'Saya Sudah Menerima Transfer',
+                        style: PaymentFlowTheme.primaryButtonTextStyle,
+                      ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

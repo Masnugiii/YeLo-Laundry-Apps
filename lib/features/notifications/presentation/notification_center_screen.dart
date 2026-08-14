@@ -13,9 +13,15 @@ import 'package:yelo_laundry_erp/features/notifications/presentation/widgets/lau
 import 'package:yelo_laundry_erp/features/notifications/presentation/widgets/operator_assistance_notification_card.dart';
 import 'package:yelo_laundry_erp/features/notifications/providers/app_notification_provider.dart';
 import 'package:yelo_laundry_erp/features/notifications/providers/notification_list_provider.dart';
+import 'package:yelo_laundry_erp/shared/widgets/api_state_widgets.dart';
 
 class NotificationCenterScreen extends ConsumerStatefulWidget {
-  const NotificationCenterScreen({super.key});
+  const NotificationCenterScreen({
+    super.key,
+    this.showBackButton = true,
+  });
+
+  final bool showBackButton;
 
   @override
   ConsumerState<NotificationCenterScreen> createState() =>
@@ -58,6 +64,7 @@ class _NotificationCenterScreenState
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.onPrimary,
         elevation: 0,
+        automaticallyImplyLeading: widget.showBackButton,
         iconTheme: const IconThemeData(color: AppColors.onPrimary),
         title: Text(
           'Notification Center',
@@ -84,16 +91,10 @@ class _NotificationCenterScreenState
         ],
       ),
       body: notificationState.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, __) => Center(
-          child: Text(
-            'Gagal memuat notifikasi.',
-            style: GoogleFonts.poppins(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: AppColors.textSecondary,
-            ),
-          ),
+        loading: () => const ApiLoadingView(message: 'Memuat notifikasi...'),
+        error: (error, _) => ApiErrorView(
+          message: messageFromError(error),
+          onRetry: () => ref.read(notificationListProvider.notifier).refresh(),
         ),
         data: (state) {
           final apiNotifications = state.items;

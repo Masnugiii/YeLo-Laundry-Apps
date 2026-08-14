@@ -11,6 +11,7 @@ import {
   toCustomerWalletTransactionItem,
 } from '../customer/customer-wallet.mapper';
 import { LoyaltySettingsService } from './loyalty-settings.service';
+import { RewardService } from './reward.service';
 
 @Injectable()
 export class WalletLoyaltyService {
@@ -18,6 +19,7 @@ export class WalletLoyaltyService {
     private readonly prisma: PrismaService,
     private readonly walletRepository: CustomerWalletRepository,
     private readonly settingsService: LoyaltySettingsService,
+    private readonly rewardService: RewardService,
   ) {}
 
   async getDashboard() {
@@ -94,6 +96,14 @@ export class WalletLoyaltyService {
         createdByEmployeeId: employeeId,
       },
     });
+
+    await this.rewardService.earnFromDeposit(
+      customerId,
+      amount,
+      'WALLET_TOPUP',
+      result.transaction.id,
+      employeeId,
+    );
 
     return {
       transaction: toCustomerWalletTransactionItem(result.transaction),

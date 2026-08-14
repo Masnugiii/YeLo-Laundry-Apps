@@ -54,7 +54,7 @@ class LaundryJobQueueScreen extends ConsumerWidget {
                 AppSpacing.s32,
               ),
               itemCount: pendingOrders.length,
-              separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.s16),
+              separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.s16),
               itemBuilder: (context, index) {
                 return LaundryJobQueueCard(order: pendingOrders[index]);
               },

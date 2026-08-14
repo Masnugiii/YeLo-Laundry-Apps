@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Android 12+ system splash cannot show a full rectangular logo (icon is
+      always circular). Use solid YeLo blue for the OS splash layer; the single
+      app loading screen (full Logo_SplashLoading) is windowBackground + Flutter.
+      Never use @mipmap/ic_launcher or adaptive icons for splash.
+    -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">@drawable/launch_background</item>
+        <item name="android:windowSplashScreenBackground">@color/splash_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_compat_icon</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@color/splash_background</item>
+    </style>
+</resources>

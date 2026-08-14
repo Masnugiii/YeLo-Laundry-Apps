@@ -1,5 +1,6 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { CustomerModule } from '../customer/customer.module';
+import { LoyaltyModule } from '../loyalty/loyalty.module';
 import { NotificationModule } from '../notification/notification.module';
 import { OrderModule } from '../order/order.module';
 import { NumberingModule } from '../numbering/numbering.module';
@@ -19,7 +20,13 @@ import { ReportController } from './report.controller';
 import { ReportService } from './report.service';
 
 @Module({
-  imports: [CustomerModule, OrderModule, NotificationModule, NumberingModule],
+  imports: [
+    forwardRef(() => CustomerModule),
+    forwardRef(() => OrderModule),
+    forwardRef(() => LoyaltyModule),
+    NotificationModule,
+    NumberingModule,
+  ],
   controllers: [
     PaymentController,
     InvoiceController,

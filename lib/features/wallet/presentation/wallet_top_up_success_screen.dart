@@ -7,6 +7,8 @@ import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
 import 'package:yelo_laundry_erp/features/wallet/models/wallet_top_up_confirmation.dart';
 import 'package:yelo_laundry_erp/features/wallet/presentation/widgets/wallet_success_action_button.dart';
 import 'package:yelo_laundry_erp/features/wallet/presentation/widgets/wallet_top_up_review_summary_card.dart';
+import 'package:yelo_laundry_erp/shared/widgets/erp_app_bar.dart';
+import 'package:yelo_laundry_erp/shared/widgets/flow_exit_scope.dart';
 
 class WalletTopUpSuccessScreen extends StatelessWidget {
   const WalletTopUpSuccessScreen({
@@ -16,11 +18,21 @@ class WalletTopUpSuccessScreen extends StatelessWidget {
 
   final WalletTopUpConfirmation confirmation;
 
+  void _finish(BuildContext context) {
+    context.go('/customers/${confirmation.customerId}');
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.dashboardBackground,
-      body: SafeArea(
+    return FlowExitScope(
+      onExit: () => _finish(context),
+      child: Scaffold(
+        backgroundColor: AppColors.dashboardBackground,
+        appBar: ErpAppBar(
+          title: 'Top Up Berhasil',
+          onBack: () => _finish(context),
+        ),
+        body: SafeArea(
         child: Column(
           children: [
             Expanded(
@@ -103,9 +115,7 @@ class WalletTopUpSuccessScreen extends StatelessWidget {
                 width: double.infinity,
                 height: 52,
                 child: FilledButton(
-                  onPressed: () {
-                    context.go('/customers/${confirmation.customerId}');
-                  },
+                  onPressed: () => _finish(context),
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: AppColors.onPrimary,
@@ -126,6 +136,7 @@ class WalletTopUpSuccessScreen extends StatelessWidget {
           ],
         ),
       ),
+    ),
     );
   }
 }

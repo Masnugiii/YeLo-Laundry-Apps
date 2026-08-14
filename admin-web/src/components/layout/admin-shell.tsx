@@ -15,7 +15,9 @@ const titleMap: Record<string, string> = {
   "/operations/production": "Production Management",
   "/operations/laundry": "Laundry Production",
   "/operations/pickup-delivery": "Pickup & Delivery",
+  "/operations/laci-laundry": "Laci Laundry",
   "/operations/attendance": "Attendance",
+  "/operations/customer-service": "Customer Service",
   "/finance/dashboard": "Finance Dashboard",
   "/finance/revenue": "Revenue",
   "/finance/payments": "Payments",
@@ -41,6 +43,7 @@ const titleMap: Record<string, string> = {
   "/audit-log": "Audit Log",
   "/notifications": "Notifications",
   "/settings": "Settings",
+  "/settings/internal-access": "Internal Access",
   "/settings/company": "Company Profile",
   "/settings/attendance": "Attendance Settings",
   "/settings/documents": "Document Rules",
@@ -53,6 +56,9 @@ const titleMap: Record<string, string> = {
   "/settings/payment-methods": "Payment Methods",
   "/settings/expense-categories": "Expense Categories",
   "/settings/loyalty": "Loyalty Settings",
+  "/settings/perfumes": "Perfume Master",
+  "/settings/development-tools": "Development Tools",
+  "/settings/development-tools/otp-testing": "OTP Testing",
 };
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
@@ -86,6 +92,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                     : pathname.startsWith("/operations/employees/") &&
                         pathname !== "/operations/employees"
                       ? "Employee Detail"
+                    : pathname.startsWith("/operations/customer-service/") &&
+                        pathname !== "/operations/customer-service"
+                      ? "Customer Service Detail"
                       : pathname.startsWith("/operations/production/") &&
                           pathname !== "/operations/production"
                         ? "Production Detail"

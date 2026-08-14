@@ -10,8 +10,8 @@ import type { LoginResponse } from "@/types/api";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [phone, setPhone] = useState("081234567890");
-  const [password, setPassword] = useState("admin123");
+  const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 

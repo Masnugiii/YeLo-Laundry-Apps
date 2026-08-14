@@ -5,7 +5,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
 import 'package:yelo_laundry_erp/features/receipt/presentation/receipt_theme.dart';
-import 'package:yelo_laundry_erp/features/wallet/data/dummy_wallet_deduction_receipt.dart';
 import 'package:yelo_laundry_erp/features/wallet/models/wallet_deduction_receipt.dart';
 import 'package:yelo_laundry_erp/features/wallet/models/wallet_payment_confirmation.dart';
 import 'package:yelo_laundry_erp/features/wallet/presentation/widgets/wallet_deduction_thermal_receipt_layout.dart';
@@ -29,12 +28,12 @@ class _WalletDeductionReceiptScreenState extends State<WalletDeductionReceiptScr
   WalletDeductionReceiptPaperWidth _paperWidth =
       WalletDeductionReceiptPaperWidth.mm58;
 
-  WalletDeductionReceipt get _receipt {
+  WalletDeductionReceipt? get _receipt {
     if (widget.receipt != null) return widget.receipt!;
     if (widget.confirmation != null) {
-      return walletDeductionReceiptFromConfirmation(widget.confirmation!);
+      return WalletDeductionReceipt.fromConfirmation(widget.confirmation!);
     }
-    return dummyWalletDeductionReceipt;
+    return null;
   }
 
   String? get _customerId => widget.confirmation?.customerId;
@@ -61,6 +60,19 @@ class _WalletDeductionReceiptScreenState extends State<WalletDeductionReceiptScr
 
   @override
   Widget build(BuildContext context) {
+    final receipt = _receipt;
+    if (receipt == null) {
+      return Scaffold(
+        backgroundColor: AppColors.dashboardBackground,
+        appBar: AppBar(
+          backgroundColor: AppColors.primary,
+          foregroundColor: AppColors.onPrimary,
+          title: const Text('Struk Pengurangan Saldo'),
+        ),
+        body: const Center(child: Text('Data struk tidak tersedia.')),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.dashboardBackground,
       appBar: AppBar(
@@ -125,7 +137,7 @@ class _WalletDeductionReceiptScreenState extends State<WalletDeductionReceiptScr
                     ],
                   ),
                   child: WalletDeductionThermalReceiptLayout(
-                    receipt: _receipt,
+                    receipt: receipt,
                     paperWidth: _paperWidth,
                   ),
                 ),

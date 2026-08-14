@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:yelo_laundry_erp/core/network/api_exception.dart';
@@ -51,8 +52,13 @@ class _LoginModeSelectionScreenState
   @override
   Widget build(BuildContext context) {
     if (!kDebugMode) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) {
+          context.go('/login');
+        }
+      });
       return const Scaffold(
-        body: Center(child: Text('Halaman ini hanya tersedia di mode development.')),
+        body: Center(child: CircularProgressIndicator()),
       );
     }
 

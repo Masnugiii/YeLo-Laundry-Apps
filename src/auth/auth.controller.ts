@@ -8,10 +8,14 @@ import {
   Patch,
   Post,
   Req,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
   ApiBody,
+  ApiConsumes,
   ApiOperation,
   ApiResponse,
   ApiTags,
@@ -20,6 +24,8 @@ import { Public } from '../common/decorators/public.decorator';
 import { ApiSuccessResponse } from '../common/interfaces/api-response.interface';
 import { isAuthenticatedCustomer } from '../customer/interfaces/authenticated-customer.interface';
 import { AuthService } from './auth.service';
+import { CustomerAvatarService } from './customer-avatar.service';
+import { UploadedAvatarFile } from './types/uploaded-avatar-file.interface';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { CustomerRegisterDto } from './dto/customer-register.dto';
 import {
@@ -37,6 +43,10 @@ import { RefreshResponseDto } from './dto/refresh-response.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { SendOtpDto } from './dto/send-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
+import {
+  RequestChangePhoneDto,
+  VerifyChangePhoneDto,
+} from './dto/change-phone.dto';
 import { AuthenticatedEmployee } from './interfaces/jwt-payload.interface';
 import { OtpService } from './otp/otp.service';
 import { Request } from 'express';
@@ -47,6 +57,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly otpService: OtpService,
+    private readonly customerAvatarService: CustomerAvatarService,
   ) {}
 
   @Public()
@@ -142,6 +153,69 @@ export class AuthController {
     }
 
     return this.otpService.updateCustomerProfile(
+      request.user.customerId,
+      dto,
+    );
+  }
+
+  @Post('profile/avatar')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('access-token')
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Upload authenticated customer profile avatar' })
+  @UseInterceptors(
+    FileInterceptor('avatar', {
+      limits: { fileSize: 10 * 1024 * 1024 },
+    }),
+  )
+  uploadProfileAvatar(
+    @Req() request: Request,
+    @UploadedFile() file: UploadedAvatarFile,
+  ): Promise<ApiSuccessResponse<CustomerProfileResponseDto>> {
+    if (!isAuthenticatedCustomer(request.user)) {
+      throw new ForbiddenException('Customer authentication required');
+    }
+
+    return this.customerAvatarService.uploadCustomerAvatar(
+      request.user.customerId,
+      file,
+      request,
+    );
+  }
+
+  @Post('profile/phone/request')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Request OTP to change authenticated customer phone' })
+  @ApiBody({ type: RequestChangePhoneDto })
+  requestPhoneChange(
+    @Req() request: Request,
+    @Body() dto: RequestChangePhoneDto,
+  ): Promise<ApiSuccessResponse<SendOtpResponseDto>> {
+    if (!isAuthenticatedCustomer(request.user)) {
+      throw new ForbiddenException('Customer authentication required');
+    }
+
+    return this.otpService.requestCustomerPhoneChange(
+      request.user.customerId,
+      dto,
+    );
+  }
+
+  @Post('profile/phone/verify')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Verify OTP and update authenticated customer phone' })
+  @ApiBody({ type: VerifyChangePhoneDto })
+  verifyPhoneChange(
+    @Req() request: Request,
+    @Body() dto: VerifyChangePhoneDto,
+  ): Promise<ApiSuccessResponse<CustomerProfileResponseDto>> {
+    if (!isAuthenticatedCustomer(request.user)) {
+      throw new ForbiddenException('Customer authentication required');
+    }
+
+    return this.otpService.verifyCustomerPhoneChange(
       request.user.customerId,
       dto,
     );

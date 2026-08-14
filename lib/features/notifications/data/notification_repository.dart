@@ -17,8 +17,8 @@ class NotificationRepository {
       queryParameters: {
         'page': page,
         'limit': limit,
-        if (isRead != null) 'isRead': isRead,
-        if (type != null) 'type': type,
+        'isRead': ?isRead,
+        'type': ?type,
       },
       parser: (json) => json as Map<String, dynamic>,
     );

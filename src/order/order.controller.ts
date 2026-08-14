@@ -50,8 +50,6 @@ const VIEW_ROLES = [
   ROLES.DRIVER,
 ] as const;
 
-const WRITE_ROLES = [ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER] as const;
-
 const ORDER_DETAIL_EXAMPLE = {
   id: 'ee0e8400-e29b-41d4-a716-446655440010',
   orderNumber: 'YL-20260808-000001',
@@ -149,7 +147,6 @@ export class OrderController {
   }
 
   @Post()
-  @Roles(...WRITE_ROLES)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a new laundry order' })
   @ApiBody({
@@ -215,7 +212,6 @@ export class OrderController {
   }
 
   @Patch(':id')
-  @Roles(...WRITE_ROLES)
   @ApiOperation({
     summary: 'Update order fields or status',
     description:
@@ -247,7 +243,6 @@ export class OrderController {
   }
 
   @Delete(':id')
-  @Roles(...WRITE_ROLES)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Cancel order (soft delete)' })
   @ApiParam({ name: 'id', description: 'Order UUID' })

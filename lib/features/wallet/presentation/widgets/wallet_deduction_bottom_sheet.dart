@@ -7,10 +7,12 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
 import 'package:yelo_laundry_erp/core/providers/core_providers.dart';
-import 'package:yelo_laundry_erp/features/wallet/data/dummy_wallet_admins.dart';
-import 'package:yelo_laundry_erp/features/wallet/data/dummy_wallet_transactions.dart';
+import 'package:yelo_laundry_erp/core/session/session_provider.dart';
+import 'package:yelo_laundry_erp/features/staff/providers/staff_admin_provider.dart';
+import 'package:yelo_laundry_erp/features/wallet/data/wallet_deduction_reasons.dart';
 import 'package:yelo_laundry_erp/features/wallet/models/wallet_admin.dart';
 import 'package:yelo_laundry_erp/features/wallet/models/wallet_payment_confirmation.dart';
+import 'package:yelo_laundry_erp/features/customer/providers/customer_detail_provider.dart';
 import 'package:yelo_laundry_erp/features/wallet/providers/wallet_providers.dart';
 import 'package:yelo_laundry_erp/features/wallet/presentation/widgets/wallet_admin_dropdown.dart';
 import 'package:yelo_laundry_erp/features/wallet/presentation/widgets/wallet_sheet_widgets.dart';
@@ -57,7 +59,7 @@ class _WalletDeductionBottomSheetState
     extends ConsumerState<_WalletDeductionBottomSheet> {
   final _amountController = TextEditingController();
   String _selectedReason = walletDeductionReasons.first;
-  WalletAdmin _selectedAdmin = dummyCurrentWalletAdmin;
+  WalletAdmin? _selectedAdmin;
 
   @override
   void dispose() {
@@ -69,6 +71,20 @@ class _WalletDeductionBottomSheetState
     final amount = int.tryParse(_amountController.text) ?? 0;
     if (amount <= 0) return;
 
+    final session = ref.read(sessionProvider);
+    if (session.id.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Sesi tidak valid. Silakan login ulang.',
+            style: GoogleFonts.poppins(fontSize: 13),
+          ),
+        ),
+      );
+      return;
+    }
+
     try {
       await ref.read(walletRepositoryProvider).deduct(
             widget.customerId,
@@ -77,6 +93,7 @@ class _WalletDeductionBottomSheetState
           );
       ref.invalidate(customerWalletProvider(widget.customerId));
       ref.invalidate(walletTransactionsProvider(widget.customerId));
+      ref.invalidate(customerDetailProvider(widget.customerId));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -99,10 +116,10 @@ class _WalletDeductionBottomSheetState
       initialBalance: widget.currentBalance,
       deductionAmount: amount,
       finalBalance: widget.currentBalance - amount,
-      adminName: _selectedAdmin.name,
+      adminName: _selectedAdmin?.name ?? 'Pengguna saat ini',
       deductionReason: _selectedReason,
       paymentMethod: 'Dompet Yelo',
-      referenceNumber: WalletPaymentConfirmation.dummyReferenceNumber(dateTime),
+      referenceNumber: WalletPaymentConfirmation.generateReferenceNumber(dateTime),
       dateTime: dateTime,
     );
 
@@ -113,8 +130,56 @@ class _WalletDeductionBottomSheetState
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    final adminsAsync = ref.watch(staffAdminOptionsProvider);
 
-    return Padding(
+    return adminsAsync.when(
+      loading: () => Padding(
+        padding: EdgeInsets.fromLTRB(
+          AppSpacing.s20,
+          AppSpacing.s12,
+          AppSpacing.s20,
+          AppSpacing.s24 + bottomInset,
+        ),
+        child: const Center(child: CircularProgressIndicator()),
+      ),
+      error: (error, _) => Padding(
+        padding: EdgeInsets.fromLTRB(
+          AppSpacing.s20,
+          AppSpacing.s12,
+          AppSpacing.s20,
+          AppSpacing.s24 + bottomInset,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const WalletSheetHandle(),
+            const SizedBox(height: AppSpacing.s16),
+            Text(
+              error is StaffAdminSessionException
+                  ? error.message
+                  : 'Gagal memuat daftar admin.',
+              style: GoogleFonts.poppins(color: AppColors.error),
+              textAlign: TextAlign.center,
+            ),
+            if (error is! StaffAdminSessionException) ...[
+              const SizedBox(height: AppSpacing.s12),
+              FilledButton(
+                onPressed: () => ref.invalidate(staffAdminOptionsProvider),
+                child: const Text('Coba Lagi'),
+              ),
+            ],
+          ],
+        ),
+      ),
+      data: (admins) {
+        final selectedAdmin = _selectedAdmin ?? currentWalletAdmin(admins);
+        if (_selectedAdmin == null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) setState(() => _selectedAdmin = selectedAdmin);
+          });
+        }
+
+        return Padding(
       padding: EdgeInsets.fromLTRB(
         AppSpacing.s20,
         AppSpacing.s12,
@@ -176,8 +241,8 @@ class _WalletDeductionBottomSheetState
           ),
           const SizedBox(height: AppSpacing.s16),
           WalletAdminDropdown(
-            selectedAdmin: _selectedAdmin,
-            admins: dummyWalletDeductionAdmins,
+            selectedAdmin: selectedAdmin,
+            admins: admins,
             onChanged: (admin) => setState(() => _selectedAdmin = admin),
           ),
           const SizedBox(height: AppSpacing.s16),
@@ -248,6 +313,8 @@ class _WalletDeductionBottomSheetState
           ),
         ],
       ),
+    );
+      },
     );
   }
 }

@@ -96,7 +96,7 @@ class _UangMasukBottomSheet extends ConsumerWidget {
                       ),
                     ),
                   ),
-                  error: (_, __) => Text(
+                  error: (_, _) => Text(
                     'Rp0',
                     style: GoogleFonts.poppins(
                       fontSize: 32,
@@ -117,7 +117,7 @@ class _UangMasukBottomSheet extends ConsumerWidget {
                 const SizedBox(height: AppSpacing.s20),
                 historyAsync.when(
                   loading: () => const SizedBox.shrink(),
-                  error: (_, __) => const SizedBox.shrink(),
+                  error: (_, _) => const SizedBox.shrink(),
                   data: (data) => _PaymentSummarySection(
                     cash: _formatCurrency((data['cash'] as num?) ?? 0),
                     qris: _formatCurrency((data['qris'] as num?) ?? 0),

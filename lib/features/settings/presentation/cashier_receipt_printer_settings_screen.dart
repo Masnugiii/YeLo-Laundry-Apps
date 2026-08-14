@@ -1,21 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
+import 'package:yelo_laundry_erp/core/providers/core_providers.dart';
 import 'package:yelo_laundry_erp/features/settings/presentation/settings_theme.dart';
 import 'package:yelo_laundry_erp/shared/widgets/selectable_chip.dart';
 
-class CashierReceiptPrinterSettingsScreen extends StatefulWidget {
+class CashierReceiptPrinterSettingsScreen extends ConsumerStatefulWidget {
   const CashierReceiptPrinterSettingsScreen({super.key});
 
   @override
-  State<CashierReceiptPrinterSettingsScreen> createState() =>
+  ConsumerState<CashierReceiptPrinterSettingsScreen> createState() =>
       _CashierReceiptPrinterSettingsScreenState();
 }
 
 class _CashierReceiptPrinterSettingsScreenState
-    extends State<CashierReceiptPrinterSettingsScreen> {
+    extends ConsumerState<CashierReceiptPrinterSettingsScreen> {
   static const _printers = [
     'Printer Thermal Default',
     'Epson TM-T82',
@@ -24,13 +26,51 @@ class _CashierReceiptPrinterSettingsScreenState
 
   String _selectedPrinter = _printers.first;
   String _paperSize = '58 mm';
+  bool _loaded = false;
 
-  void _save() {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadPreferences());
+  }
+
+  void _loadPreferences() {
+    final prefs = ref.read(preferencesServiceProvider);
+    if (prefs == null) return;
+
+    setState(() {
+      _selectedPrinter =
+          prefs.readReceiptPrinterName() ?? _printers.first;
+      _paperSize = prefs.readReceiptPaperSize() ?? '58 mm';
+      _loaded = true;
+    });
+  }
+
+  Future<void> _save() async {
+    final prefs = ref.read(preferencesServiceProvider);
+    if (prefs == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text(
+            'Preferensi perangkat belum siap.',
+            style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w500),
+          ),
+        ),
+      );
+      return;
+    }
+
+    await prefs.saveReceiptPrinterName(_selectedPrinter);
+    await prefs.saveReceiptPaperSize(_paperSize);
+
+    if (!mounted) return;
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         behavior: SnackBarBehavior.floating,
         content: Text(
-          'Pengaturan printer disimpan (dummy).',
+          'Pengaturan printer disimpan.',
           style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w500),
         ),
       ),
@@ -39,6 +79,13 @@ class _CashierReceiptPrinterSettingsScreenState
 
   @override
   Widget build(BuildContext context) {
+    if (!_loaded) {
+      return const Scaffold(
+        backgroundColor: AppColors.dashboardBackground,
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.dashboardBackground,
       appBar: AppBar(

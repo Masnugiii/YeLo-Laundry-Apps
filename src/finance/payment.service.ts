@@ -7,6 +7,7 @@ import {
 import { OrderStatus, PaymentStatus, WalletTransactionType } from '@prisma/client';
 import { ApiSuccessResponse } from '../common/interfaces/api-response.interface';
 import { CustomerWalletRepository } from '../customer/customer-wallet.repository';
+import { RewardService } from '../loyalty/reward.service';
 import {
   API_NOTIFICATION_TYPES,
   NOTIFICATION_EVENTS,
@@ -42,6 +43,7 @@ export class PaymentService {
     private readonly walletRepository: CustomerWalletRepository,
     private readonly auditService: FinanceAuditService,
     private readonly notificationEventService: NotificationEventService,
+    private readonly rewardService: RewardService,
   ) {}
 
   async findAll(
@@ -140,14 +142,19 @@ export class PaymentService {
       dto.paymentMethod === 'CUSTOMER_WALLET' &&
       paymentStatus === PaymentStatus.PAID
     ) {
+      const walletReferenceNumber =
+        await this.walletRepository.generateNextReferenceNumber();
+
       const walletResult = await this.walletRepository.applyMutation({
         customerId: order.customerId,
         amount: dto.amount,
         type: WalletTransactionType.deduction,
         description: `Order payment ${referenceNumber}`,
         employeeId,
-        referenceNumber,
+        referenceNumber: walletReferenceNumber,
         isCredit: false,
+        referenceType: 'ORDER_PAYMENT',
+        referenceId: dto.orderId,
       });
 
       if ('walletNotFound' in walletResult) {
@@ -407,6 +414,12 @@ export class PaymentService {
       notifyRoles: ['OWNER', 'MANAGER', 'CASHIER'],
       notifyCustomer: true,
     });
+
+    await this.rewardService.clawbackFromOrder(
+      payment.order.customerId,
+      payment.orderId,
+      employeeId,
+    );
 
     const totalPaid = await this.paymentRepository.getPaidTotalForOrder(
       payment.orderId,

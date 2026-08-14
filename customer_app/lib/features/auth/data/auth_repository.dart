@@ -1,16 +1,17 @@
+import 'package:yelo_laundry_customer/core/auth/auth_debug_log.dart';
 import 'package:yelo_laundry_customer/core/network/api_client.dart';
+import 'package:yelo_laundry_customer/core/network/api_exception.dart';
 import 'package:yelo_laundry_customer/core/session/customer_session.dart';
 import 'package:yelo_laundry_customer/core/storage/preferences_service.dart';
 import 'package:yelo_laundry_customer/core/storage/secure_storage_service.dart';
+import 'package:yelo_laundry_customer/core/utils/phone_util.dart';
 
 class AuthRepository {
   AuthRepository({
     required ApiClient apiClient,
-    required SecureStorageService secureStorage,
-    required PreferencesService preferences,
-  })  : _api = apiClient,
-        _secureStorage = secureStorage,
-        _preferences = preferences;
+    required this._secureStorage,
+    required this._preferences,
+  })  : _api = apiClient;
 
   final ApiClient _api;
   final SecureStorageService _secureStorage;
@@ -20,9 +21,10 @@ class AuthRepository {
     required String phone,
     required String purpose,
   }) async {
+    final normalizedPhone = PhoneUtil.normalizeForApi(phone);
     final data = await _api.post<Map<String, dynamic>>(
       '/auth/otp/send',
-      data: {'phone': phone, 'purpose': purpose},
+      data: {'phone': normalizedPhone, 'purpose': purpose},
       parser: (json) => json as Map<String, dynamic>,
     );
 
@@ -39,11 +41,12 @@ class AuthRepository {
     required String otpCode,
     bool rememberMe = true,
   }) async {
+    final normalizedPhone = PhoneUtil.normalizeForApi(phone);
     final data = await _api.post<Map<String, dynamic>>(
       '/auth/otp/verify',
       data: {
         'otpRequestId': otpRequestId,
-        'phone': phone,
+        'phone': normalizedPhone,
         'otpCode': otpCode,
         'deviceInfo': 'Yelo Customer App',
       },
@@ -58,16 +61,21 @@ class AuthRepository {
     required String phone,
     required String otpCode,
     required String fullName,
+    required int age,
+    required String occupation,
     String? email,
     bool rememberMe = true,
   }) async {
+    final normalizedPhone = PhoneUtil.normalizeForApi(phone);
     final data = await _api.post<Map<String, dynamic>>(
       '/auth/customer/register',
       data: {
         'otpRequestId': otpRequestId,
-        'phone': phone,
+        'phone': normalizedPhone,
         'otpCode': otpCode,
         'fullName': fullName,
+        'age': age,
+        'occupation': occupation,
         if (email != null && email.isNotEmpty) 'email': email,
       },
       parser: (json) => json as Map<String, dynamic>,
@@ -77,15 +85,40 @@ class AuthRepository {
   }
 
   Future<CustomerSession?> restoreSession() async {
-    final token = await _secureStorage.getAccessToken();
-    if (token == null || token.isEmpty) return null;
+    final accessToken = await _secureStorage.getAccessToken();
+    final refreshToken = await _secureStorage.getRefreshToken();
 
-    try {
-      return fetchProfile();
-    } catch (_) {
-      await _secureStorage.clearTokens();
+    authDebugLog(
+      'restoreSession found access token: ${accessToken != null && accessToken.isNotEmpty}',
+    );
+    authDebugLog(
+      'restoreSession found refresh token: ${refreshToken != null && refreshToken.isNotEmpty}',
+    );
+
+    if ((accessToken == null || accessToken.isEmpty) &&
+        (refreshToken == null || refreshToken.isEmpty)) {
       return null;
     }
+
+    try {
+      return await fetchProfile();
+    } on ApiException catch (error) {
+      if (error.isUnauthorized) {
+        authDebugLog('restoreSession unauthorized');
+        return null;
+      }
+
+      authDebugLog('restoreSession transient error, using cached profile');
+      return _readCachedProfileIfTokensPresent();
+    } catch (_) {
+      authDebugLog('restoreSession error, using cached profile');
+      return _readCachedProfileIfTokensPresent();
+    }
+  }
+
+  Future<CustomerSession?> _readCachedProfileIfTokensPresent() async {
+    if (!await _secureStorage.hasTokens()) return null;
+    return _preferences.readCustomerProfile();
   }
 
   Future<CustomerSession> fetchProfile() async {
@@ -94,24 +127,22 @@ class AuthRepository {
       parser: (json) => json as Map<String, dynamic>,
     );
 
-    final session = CustomerSession(
-      id: data['id'] as String,
-      fullName: data['fullName'] as String,
-      phone: data['phone'] as String,
-      email: data['email'] as String?,
-      photoUrl: data['photoUrl'] as String?,
-      loyaltyPoints: (data['loyaltyPoints'] as num?)?.toInt() ?? 0,
-      walletBalance: (data['walletBalance'] as num?)?.toDouble() ?? 0,
-    );
+    final session = CustomerSession.fromJson(data);
 
     await _preferences.saveCustomerProfile(session);
     return session;
   }
 
   Future<void> logout() async {
-    try {
-      await _api.post<void>('/auth/logout');
-    } catch (_) {}
+    final accessToken = await _secureStorage.getAccessToken();
+    if (accessToken != null && accessToken.isNotEmpty) {
+      try {
+        await _api.post<void>('/auth/logout');
+      } catch (_) {
+        // Best-effort server logout; local session is always cleared below.
+      }
+    }
+
     await _secureStorage.clearTokens();
     await _preferences.clearCustomerProfile();
   }
@@ -120,27 +151,48 @@ class AuthRepository {
     Map<String, dynamic> data, {
     required bool rememberMe,
   }) async {
+    authDebugLog('login response received');
+
     final accessToken = data['accessToken'] as String;
     final refreshToken = data['refreshToken'] as String?;
     final user = data['user'] as Map<String, dynamic>;
 
-    if (rememberMe) {
-      await _secureStorage.saveTokens(
-        accessToken: accessToken,
-        refreshToken: refreshToken,
+    await _secureStorage.saveTokens(
+      accessToken: accessToken,
+      refreshToken: refreshToken,
+    );
+
+    final hasTokens = await _secureStorage.hasTokens();
+    if (!hasTokens) {
+      authDebugLog('token persistence verification failed');
+      throw const ApiException(
+        message: 'Gagal menyimpan token autentikasi.',
+        type: ApiErrorType.unknown,
       );
     }
 
-    final session = CustomerSession(
-      id: user['id'] as String,
-      fullName: user['fullName'] as String,
-      phone: user['phone'] as String,
-      email: user['email'] as String?,
-      photoUrl: user['photoUrl'] as String?,
-    );
+    // OTP/register responses only include a minimal user object (no customerCode).
+    // Load the full profile so member card serial + QR have real data immediately.
+    authDebugLog('fetching profile after auth');
+    try {
+      return await fetchProfile();
+    } on ApiException {
+      rethrow;
+    } catch (_) {
+      final session = CustomerSession.fromJson({
+        ...user,
+        if (data['loyaltyPoints'] != null)
+          'loyaltyPoints': data['loyaltyPoints'],
+        if (data['walletBalance'] != null)
+          'walletBalance': data['walletBalance'],
+        if (data['membership'] != null) 'membership': data['membership'],
+        if (data['membershipLevel'] != null)
+          'membershipLevel': data['membershipLevel'],
+      });
 
-    await _preferences.saveCustomerProfile(session);
-    return session;
+      await _preferences.saveCustomerProfile(session);
+      return session;
+    }
   }
 }
 

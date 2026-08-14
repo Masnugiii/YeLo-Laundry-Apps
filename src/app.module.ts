@@ -29,12 +29,16 @@ import { SettingsModule } from './settings/settings.module';
 import { MasterDataModule } from './master-data/master-data.module';
 import { NumberingModule } from './numbering/numbering.module';
 import { CustomerServiceModule } from './customer-service/customer-service.module';
+import { PlatformModule } from './platform/platform.module';
+import { StorageModule } from './storage/storage.module';
+import { DevModule } from './dev/dev.module';
 
 @Module({
   imports: [
     AppConfigModule,
     LoggerModule,
     PrismaModule,
+    PlatformModule,
     HealthModule,
     AuthModule,
     RbacModule,
@@ -57,6 +61,8 @@ import { CustomerServiceModule } from './customer-service/customer-service.modul
     MasterDataModule,
     NumberingModule,
     CustomerServiceModule,
+    StorageModule,
+    DevModule,
   ],
   providers: [
     {

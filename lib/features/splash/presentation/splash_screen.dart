@@ -1,84 +1,120 @@
-import 'package:flutter/foundation.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/core/session/session_provider.dart';
 
+/// Single startup splash: YeLo blue + [Logo_SplashLoading.png].
+///
+/// Same loading pattern as customer_app: visible for at least [_minVisible]
+/// while waiting on [restoreSession]. Duration = max(0.8s, auth restore).
+/// Authenticated → /role-check (dashboard), otherwise → /login.
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
+
+  static const splashLogoAsset = 'assets/images/Logo_SplashLoading.png';
 
   @override
   ConsumerState<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends ConsumerState<SplashScreen>
-    with SingleTickerProviderStateMixin {
-  static const _logoAsset = 'assets/images/Logo_WithBackground.png';
+class _SplashScreenState extends ConsumerState<SplashScreen> {
+  static const _splashBackground = AppColors.primary;
+  static const _minVisible = Duration(milliseconds: 800);
 
-  late final AnimationController _fadeController;
-  late final Animation<double> _fadeAnimation;
+  /// Moderate width: full logo readable, does not fill the screen.
+  static const _logoWidthFactor = 0.55;
+
+  static const _systemUiOverlayStyle = SystemUiOverlayStyle(
+    statusBarColor: _splashBackground,
+    statusBarIconBrightness: Brightness.light,
+    systemNavigationBarColor: _splashBackground,
+    systemNavigationBarIconBrightness: Brightness.light,
+  );
+
+  late final DateTime _shownAt;
+  bool _navigated = false;
+  Timer? _minVisibleTimer;
 
   @override
   void initState() {
     super.initState();
-
-    _fadeController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 700),
-    );
-
-    _fadeAnimation = CurvedAnimation(
-      parent: _fadeController,
-      curve: Curves.easeInOut,
-    );
-
-    _fadeController.forward();
-    _navigateNext();
-  }
-
-  Future<void> _navigateNext() async {
-    await Future<void>.delayed(const Duration(seconds: 1));
-
-    if (!mounted) return;
-
-    if (kDebugMode) {
-      context.go('/login');
-      return;
-    }
-
-    final auth = ref.read(authProvider);
-    if (auth.status == AuthStatus.authenticated) {
-      context.go('/role-check');
-      return;
-    }
-
-    if (auth.status == AuthStatus.unauthenticated) {
-      context.go('/login');
-    }
+    _shownAt = DateTime.now();
   }
 
   @override
   void dispose() {
-    _fadeController.dispose();
+    _minVisibleTimer?.cancel();
     super.dispose();
+  }
+
+  void _leaveSplashIfReady() {
+    if (_navigated || !mounted) return;
+
+    final status = ref.read(authProvider).status;
+    if (status == AuthStatus.initial || status == AuthStatus.loading) {
+      return;
+    }
+
+    if (GoRouter.maybeOf(context) == null) return;
+
+    final remaining = _minVisible - DateTime.now().difference(_shownAt);
+    if (remaining > Duration.zero) {
+      _minVisibleTimer?.cancel();
+      _minVisibleTimer = Timer(remaining, _navigateNow);
+      return;
+    }
+
+    _navigateNow();
+  }
+
+  void _navigateNow() {
+    if (_navigated || !mounted) return;
+
+    final status = ref.read(authProvider).status;
+    if (status == AuthStatus.initial || status == AuthStatus.loading) {
+      return;
+    }
+    if (GoRouter.maybeOf(context) == null) return;
+
+    _navigated = true;
+    _minVisibleTimer?.cancel();
+    if (status == AuthStatus.authenticated) {
+      context.go('/role-check');
+    } else {
+      context.go('/login');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final logoWidth =
-        (MediaQuery.of(context).size.width * 0.75).clamp(260.0, 340.0);
+    // Watch so we rebuild when restoreSession finishes — do not rely on
+    // ref.listen alone (it can miss a state that already settled).
+    final auth = ref.watch(authProvider);
+    final ready = auth.status != AuthStatus.initial &&
+        auth.status != AuthStatus.loading;
 
-    return Scaffold(
-      backgroundColor: AppColors.primary,
-      body: Center(
-        child: FadeTransition(
-          opacity: _fadeAnimation,
-          child: Image.asset(
-            _logoAsset,
-            width: logoWidth,
-            fit: BoxFit.contain,
+    if (ready && !_navigated) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _leaveSplashIfReady());
+    }
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: _systemUiOverlayStyle,
+      child: Scaffold(
+        backgroundColor: _splashBackground,
+        body: Center(
+          child: FractionallySizedBox(
+            widthFactor: _logoWidthFactor,
+            child: Image.asset(
+              SplashScreen.splashLogoAsset,
+              fit: BoxFit.contain,
+              filterQuality: FilterQuality.high,
+              gaplessPlayback: true,
+            ),
           ),
         ),
       ),

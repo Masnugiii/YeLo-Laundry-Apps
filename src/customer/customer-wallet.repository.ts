@@ -21,11 +21,12 @@ interface WalletMutationParams {
   amount: number;
   type: WalletTransactionType;
   description?: string;
-  employeeId: string;
+  employeeId?: string | null;
   referenceNumber: string;
   isCredit: boolean;
   referenceType?: string;
   referenceId?: string;
+  tx?: Prisma.TransactionClient;
 }
 
 @Injectable()
@@ -168,7 +169,20 @@ export class CustomerWalletRepository {
   }
 
   applyMutation(params: WalletMutationParams) {
-    return this.prisma.$transaction(async (tx) => {
+    const run = async (tx: Prisma.TransactionClient) =>
+      this.applyMutationInTx(tx, params);
+
+    if (params.tx) {
+      return run(params.tx);
+    }
+
+    return this.prisma.$transaction(run);
+  }
+
+  private async applyMutationInTx(
+    tx: Prisma.TransactionClient,
+    params: WalletMutationParams,
+  ) {
       let wallet = await tx.customerWallet.findFirst({
         where: { customerId: params.customerId, deletedAt: null },
         select: customerWalletSelect,
@@ -218,7 +232,7 @@ export class CustomerWalletRepository {
           type: params.type,
           referenceNumber: params.referenceNumber,
           description: params.description,
-          createdByEmployeeId: params.employeeId,
+          createdByEmployeeId: params.employeeId ?? null,
           balanceAfter: nextBalance,
           referenceType: params.referenceType,
           referenceId: params.referenceId,
@@ -237,7 +251,6 @@ export class CustomerWalletRepository {
         transaction,
         aggregates,
       };
-    });
   }
 
   private async getWalletAggregatesInTx(

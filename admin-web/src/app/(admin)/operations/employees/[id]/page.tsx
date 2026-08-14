@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { FormEvent, useCallback, useState } from "react";
 import { EmployeeRoleBadges } from "@/components/employees/employee-role-badges";
 import { EmployeeStatusBadge } from "@/components/employees/employee-status-badge";
 import {
@@ -56,6 +56,21 @@ function buildFormFromEmployee(
   };
 }
 
+function buildUpdatePayloadFromFormData(
+  formData: FormData,
+): UpdateEmployeeInput {
+  const email = String(formData.get("email") ?? "").trim();
+
+  return {
+    employeeCode: String(formData.get("employeeCode") ?? "").trim(),
+    fullName: String(formData.get("fullName") ?? "").trim(),
+    phone: String(formData.get("phone") ?? "").trim(),
+    email: email || undefined,
+    position: String(formData.get("position") ?? "").trim(),
+    status: String(formData.get("status") ?? "ACTIVE") as EmployeeStatus,
+  };
+}
+
 export default function EmployeeDetailPage() {
   const params = useParams<{ id: string }>();
   const employeeId = params.id;
@@ -71,6 +86,31 @@ export default function EmployeeDetailPage() {
   const [form, setForm] = useState<UpdateEmployeeInput>({});
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+
+  const handleSave = useCallback(
+    async (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+
+      const payload = buildUpdatePayloadFromFormData(
+        new FormData(event.currentTarget),
+      );
+
+      try {
+        await updateEmployee.mutateAsync(payload);
+        setIsEditing(false);
+        setForm({});
+        toast.success("Employee updated successfully.");
+      } catch (mutationError) {
+        if (process.env.NODE_ENV === "development") {
+          console.error("Employee update failed:", mutationError);
+        }
+        toast.error(
+          getErrorMessage(mutationError, "Failed to update employee."),
+        );
+      }
+    },
+    [toast, updateEmployee],
+  );
 
   function startEditing() {
     if (!data) return;
@@ -98,26 +138,6 @@ export default function EmployeeDetailPage() {
   }
 
   const isActive = data.status === "ACTIVE";
-
-  async function handleSave(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    try {
-      await updateEmployee.mutateAsync({
-        employeeCode: form.employeeCode,
-        fullName: form.fullName,
-        phone: form.phone,
-        email: form.email || undefined,
-        position: form.position,
-        status: form.status,
-      });
-      setIsEditing(false);
-      setForm({});
-      toast.success("Employee updated successfully.");
-    } catch (mutationError) {
-      toast.error(getErrorMessage(mutationError, "Failed to update employee."));
-    }
-  }
 
   async function handleActivate() {
     try {
@@ -203,6 +223,7 @@ export default function EmployeeDetailPage() {
             <label className="space-y-2 text-sm">
               <span className="font-medium text-slate-500">Employee Code</span>
               <Input
+                name="employeeCode"
                 value={form.employeeCode ?? ""}
                 onChange={(event) =>
                   setForm((current) => ({ ...current, employeeCode: event.target.value }))
@@ -213,6 +234,7 @@ export default function EmployeeDetailPage() {
             <label className="space-y-2 text-sm">
               <span className="font-medium text-slate-500">Full Name</span>
               <Input
+                name="fullName"
                 value={form.fullName ?? ""}
                 onChange={(event) =>
                   setForm((current) => ({ ...current, fullName: event.target.value }))
@@ -223,6 +245,7 @@ export default function EmployeeDetailPage() {
             <label className="space-y-2 text-sm">
               <span className="font-medium text-slate-500">Phone</span>
               <Input
+                name="phone"
                 value={form.phone ?? ""}
                 onChange={(event) =>
                   setForm((current) => ({ ...current, phone: event.target.value }))
@@ -234,6 +257,7 @@ export default function EmployeeDetailPage() {
               <span className="font-medium text-slate-500">Email</span>
               <Input
                 type="email"
+                name="email"
                 value={form.email ?? ""}
                 onChange={(event) =>
                   setForm((current) => ({ ...current, email: event.target.value }))
@@ -243,6 +267,7 @@ export default function EmployeeDetailPage() {
             <label className="space-y-2 text-sm">
               <span className="font-medium text-slate-500">Position</span>
               <Input
+                name="position"
                 value={form.position ?? ""}
                 onChange={(event) =>
                   setForm((current) => ({ ...current, position: event.target.value }))
@@ -252,6 +277,7 @@ export default function EmployeeDetailPage() {
             <label className="space-y-2 text-sm">
               <span className="font-medium text-slate-500">Status</span>
               <select
+                name="status"
                 className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none ring-blue-500 focus:ring-2 dark:border-slate-700 dark:bg-slate-900"
                 value={form.status ?? "ACTIVE"}
                 onChange={(event) =>

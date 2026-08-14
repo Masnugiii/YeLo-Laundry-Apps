@@ -32,7 +32,7 @@ class WalletHistoryScreen extends ConsumerWidget {
         elevation: 0,
         iconTheme: const IconThemeData(color: AppColors.onPrimary),
         title: Text(
-          'Riwayat Deposit',
+          'Riwayat Wallet',
           style: GoogleFonts.poppins(
             fontSize: 22,
             fontWeight: FontWeight.w700,

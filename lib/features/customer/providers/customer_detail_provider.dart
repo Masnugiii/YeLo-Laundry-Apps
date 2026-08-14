@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:yelo_laundry_erp/core/providers/core_providers.dart';
-import 'package:yelo_laundry_erp/features/customer/data/dummy_customers.dart';
+import 'package:yelo_laundry_erp/core/role/staff_permissions.dart';
 import 'package:yelo_laundry_erp/features/customer/models/customer.dart';
 import 'package:yelo_laundry_erp/features/customer/models/customer_order_history.dart';
 import 'package:yelo_laundry_erp/features/customer/models/customer_statistics.dart';
@@ -22,22 +22,22 @@ class CustomerDetailData {
 
 final customerDetailProvider =
     FutureProvider.family<CustomerDetailData, String>((ref, customerId) async {
-  final customer =
-      await ref.read(customerRepositoryProvider).fetchCustomer(customerId);
-  final wallet =
-      await ref.read(walletRepositoryProvider).fetchCustomerWallet(customerId);
-  final dummyProfile = findCustomerProfile(customerId);
+  final permissions = ref.watch(staffPermissionsProvider);
+  final customerRepository = ref.read(customerRepositoryProvider);
+  final customer = await customerRepository.fetchCustomer(customerId);
+  final walletBalance = permissions.wallet
+      ? (await ref
+              .read(walletRepositoryProvider)
+              .fetchCustomerWallet(customerId))
+          .balance
+          .round()
+      : customer.walletBalance;
+  final summary = await customerRepository.fetchCustomerSummary(customerId);
 
   return CustomerDetailData(
     customer: customer,
-    walletBalance: wallet.balance.round(),
-    statistics: dummyProfile?.statistics ??
-        const CustomerStatistics(
-          totalOrders: 0,
-          lastOrder: '-',
-          totalSpending: 0,
-          averageOrderValue: 0,
-        ),
-    recentOrders: dummyProfile?.recentOrders ?? const [],
+    walletBalance: walletBalance,
+    statistics: customerRepository.mapSummaryToStatistics(summary),
+    recentOrders: const [],
   );
 });

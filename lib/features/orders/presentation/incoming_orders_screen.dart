@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
 import 'package:yelo_laundry_erp/core/utils/debouncer.dart';
+import 'package:yelo_laundry_erp/features/dashboard/presentation/widgets/back_to_dashboard_link.dart';
 import 'package:yelo_laundry_erp/features/orders/providers/order_list_provider.dart';
 import 'package:yelo_laundry_erp/features/orders/presentation/widgets/incoming_order_card.dart';
 import 'package:yelo_laundry_erp/shared/widgets/api_state_widgets.dart';
@@ -13,10 +14,12 @@ class IncomingOrdersScreen extends ConsumerStatefulWidget {
   const IncomingOrdersScreen({
     super.key,
     this.showBackButton = true,
+    this.showBackToDashboard = false,
     this.title = 'Order',
   });
 
   final bool showBackButton;
+  final bool showBackToDashboard;
   final String title;
 
   @override
@@ -45,7 +48,11 @@ class _IncomingOrdersScreenState extends ConsumerState<IncomingOrdersScreen> {
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.onPrimary,
         elevation: 0,
-        automaticallyImplyLeading: widget.showBackButton,
+        automaticallyImplyLeading:
+            widget.showBackButton && !widget.showBackToDashboard,
+        leading: widget.showBackToDashboard
+            ? const DashboardAppBarBackButton()
+            : null,
         iconTheme: const IconThemeData(color: AppColors.onPrimary),
         title: Text(
           widget.title,
@@ -111,7 +118,7 @@ class _IncomingOrdersScreenState extends ConsumerState<IncomingOrdersScreen> {
                       ),
                       itemCount:
                           state.orders.length + (state.isLoadingMore ? 1 : 0),
-                      separatorBuilder: (_, __) =>
+                      separatorBuilder: (_, _) =>
                           const SizedBox(height: AppSpacing.s16),
                       itemBuilder: (context, index) {
                         if (index >= state.orders.length) {

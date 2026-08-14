@@ -172,7 +172,9 @@ export function toCustomerDetail(
         }
       : null,
     defaultAddress: mapAddress(customer.defaultAddress),
-    addresses: customer.addresses.map((address) => mapAddress(address)!),
+    addresses: (customer.addresses ?? []).map(
+      (address) => mapAddress(address)!,
+    ),
   };
 }
 

@@ -1,26 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
+import 'package:yelo_laundry_erp/core/network/api_exception.dart';
+import 'package:yelo_laundry_erp/core/providers/core_providers.dart';
 import 'package:yelo_laundry_erp/features/customer/presentation/widgets/customer_form_field.dart';
-
-class DummyCustomerFormData {
-  const DummyCustomerFormData({
-    required this.name,
-    required this.phone,
-    required this.occupation,
-    required this.address,
-    required this.joinDate,
-  });
-
-  final String name;
-  final String phone;
-  final String occupation;
-  final String address;
-  final DateTime joinDate;
-}
 
 Future<void> showAddCustomerBottomSheet(BuildContext context) {
   return showModalBottomSheet<void>(
@@ -35,14 +22,15 @@ Future<void> showAddCustomerBottomSheet(BuildContext context) {
   );
 }
 
-class _AddCustomerBottomSheet extends StatefulWidget {
+class _AddCustomerBottomSheet extends ConsumerStatefulWidget {
   const _AddCustomerBottomSheet();
 
   @override
-  State<_AddCustomerBottomSheet> createState() => _AddCustomerBottomSheetState();
+  ConsumerState<_AddCustomerBottomSheet> createState() =>
+      _AddCustomerBottomSheetState();
 }
 
-class _AddCustomerBottomSheetState extends State<_AddCustomerBottomSheet> {
+class _AddCustomerBottomSheetState extends ConsumerState<_AddCustomerBottomSheet> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
@@ -50,6 +38,8 @@ class _AddCustomerBottomSheetState extends State<_AddCustomerBottomSheet> {
   final _addressController = TextEditingController();
   final DateTime _joinDate = DateTime(2026, 8, 7);
   late final TextEditingController _joinDateController;
+
+  bool _isSaving = false;
 
   static final _inputBorder = OutlineInputBorder(
     borderRadius: BorderRadius.circular(12),
@@ -93,30 +83,61 @@ class _AddCustomerBottomSheetState extends State<_AddCustomerBottomSheet> {
     return '${date.day} ${months[date.month - 1]} ${date.year}';
   }
 
-  void _save() {
-    if (!(_formKey.currentState?.validate() ?? false)) {
+  Future<void> _save() async {
+    if (_isSaving || !(_formKey.currentState?.validate() ?? false)) {
       return;
     }
 
-    final data = DummyCustomerFormData(
-      name: _nameController.text.trim(),
-      phone: _phoneController.text.trim(),
-      occupation: _occupationController.text.trim(),
-      address: _addressController.text.trim(),
-      joinDate: _joinDate,
-    );
+    setState(() => _isSaving = true);
 
-    Navigator.of(context).pop();
+    try {
+      final customer =
+          await ref.read(customerRepositoryProvider).createCustomer(
+                fullName: _nameController.text.trim(),
+                phone: _phoneController.text.trim(),
+                occupation: _occupationController.text.trim(),
+                addressDetail: _addressController.text.trim(),
+              );
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Customer ${data.name} siap disimpan (dummy)',
-          style: GoogleFonts.poppins(),
+      if (!mounted) return;
+
+      Navigator.of(context).pop(customer);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Pelanggan ${customer.name} berhasil disimpan',
+            style: GoogleFonts.poppins(),
+          ),
+          behavior: SnackBarBehavior.floating,
         ),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+      );
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.message, style: GoogleFonts.poppins()),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppColors.error,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Gagal menyimpan pelanggan.',
+            style: GoogleFonts.poppins(),
+          ),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppColors.error,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
   }
 
   InputDecoration _decoration(String hint) {
@@ -261,7 +282,7 @@ class _AddCustomerBottomSheetState extends State<_AddCustomerBottomSheet> {
                 width: double.infinity,
                 height: 52,
                 child: FilledButton(
-                  onPressed: _save,
+                  onPressed: _isSaving ? null : _save,
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: AppColors.onPrimary,
@@ -269,13 +290,22 @@ class _AddCustomerBottomSheetState extends State<_AddCustomerBottomSheet> {
                       borderRadius: BorderRadius.circular(16),
                     ),
                   ),
-                  child: Text(
-                    'Simpan Customer',
-                    style: GoogleFonts.poppins(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  child: _isSaving
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.onPrimary,
+                          ),
+                        )
+                      : Text(
+                          'Simpan Customer',
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                 ),
               ),
             ],

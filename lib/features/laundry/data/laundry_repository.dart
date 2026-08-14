@@ -41,6 +41,7 @@ class LaundryRepository {
     int limit = 20,
     String? search,
     String? stage,
+    String? employeeId,
   }) async {
     final data = await _apiClient.get<Map<String, dynamic>>(
       '/laundry/orders',
@@ -48,7 +49,8 @@ class LaundryRepository {
         'page': page,
         'limit': limit,
         if (search != null && search.isNotEmpty) 'search': search,
-        if (stage != null) 'stage': stage,
+        'stage': ?stage,
+        'employeeId': ?employeeId,
       },
       parser: (json) => json as Map<String, dynamic>,
     );

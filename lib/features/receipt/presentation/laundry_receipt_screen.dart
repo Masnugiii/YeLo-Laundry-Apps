@@ -3,7 +3,6 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
-import 'package:yelo_laundry_erp/features/receipt/data/dummy_laundry_receipt.dart';
 import 'package:yelo_laundry_erp/features/receipt/models/laundry_receipt.dart';
 import 'package:yelo_laundry_erp/features/receipt/presentation/receipt_theme.dart';
 import 'package:yelo_laundry_erp/features/receipt/presentation/widgets/pdf_receipt_layout.dart';
@@ -26,9 +25,7 @@ class LaundryReceiptScreen extends StatefulWidget {
 class _LaundryReceiptScreenState extends State<LaundryReceiptScreen> {
   ReceiptPreviewMode _previewMode = ReceiptPreviewMode.thermal58;
 
-  LaundryReceipt get _receipt => widget.receipt ?? dummyLaundryReceipt;
-
-  void _showDummySnackBar(String message) {
+  void _showSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         behavior: SnackBarBehavior.floating,
@@ -40,23 +37,25 @@ class _LaundryReceiptScreenState extends State<LaundryReceiptScreen> {
     );
   }
 
-  Widget _buildPreview() {
+  Widget _buildPreview(LaundryReceipt receipt) {
     return switch (_previewMode) {
       ReceiptPreviewMode.thermal58 => ThermalReceiptLayout(
-          receipt: _receipt,
+          receipt: receipt,
           paperWidth: ThermalPaperWidth.mm58,
         ),
       ReceiptPreviewMode.thermal80 => ThermalReceiptLayout(
-          receipt: _receipt,
+          receipt: receipt,
           paperWidth: ThermalPaperWidth.mm80,
         ),
-      ReceiptPreviewMode.pdf => PdfReceiptLayout(receipt: _receipt),
-      ReceiptPreviewMode.whatsapp => WhatsappReceiptLayout(receipt: _receipt),
+      ReceiptPreviewMode.pdf => PdfReceiptLayout(receipt: receipt),
+      ReceiptPreviewMode.whatsapp => WhatsappReceiptLayout(receipt: receipt),
     };
   }
 
   @override
   Widget build(BuildContext context) {
+    final receipt = widget.receipt;
+
     return Scaffold(
       backgroundColor: AppColors.dashboardBackground,
       appBar: AppBar(
@@ -73,90 +72,105 @@ class _LaundryReceiptScreenState extends State<LaundryReceiptScreen> {
           ),
         ),
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.s20,
-              AppSpacing.s16,
-              AppSpacing.s20,
-              AppSpacing.s8,
-            ),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  _PreviewChip(
-                    label: '58 mm',
-                    selected: _previewMode == ReceiptPreviewMode.thermal58,
-                    onTap: () => setState(
-                      () => _previewMode = ReceiptPreviewMode.thermal58,
-                    ),
+      body: receipt == null
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.s24),
+                child: Text(
+                  'Struk tidak tersedia. Buka struk dari detail order atau setelah pembayaran.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    color: AppColors.textSecondary,
+                    height: 1.5,
                   ),
-                  const SizedBox(width: AppSpacing.s8),
-                  _PreviewChip(
-                    label: '80 mm',
-                    selected: _previewMode == ReceiptPreviewMode.thermal80,
-                    onTap: () => setState(
-                      () => _previewMode = ReceiptPreviewMode.thermal80,
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.s8),
-                  _PreviewChip(
-                    label: 'PDF',
-                    selected: _previewMode == ReceiptPreviewMode.pdf,
-                    onTap: () => setState(
-                      () => _previewMode = ReceiptPreviewMode.pdf,
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.s8),
-                  _PreviewChip(
-                    label: 'WhatsApp',
-                    selected: _previewMode == ReceiptPreviewMode.whatsapp,
-                    onTap: () => setState(
-                      () => _previewMode = ReceiptPreviewMode.whatsapp,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Expanded(
-            child: Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.s20,
-                  vertical: AppSpacing.s16,
                 ),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: ReceiptTheme.backgroundColor,
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.textPrimary.withValues(alpha: 0.12),
-                        blurRadius: 16,
-                        offset: const Offset(0, 4),
+              ),
+            )
+          : Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.s20,
+                    AppSpacing.s16,
+                    AppSpacing.s20,
+                    AppSpacing.s8,
+                  ),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _PreviewChip(
+                          label: '58 mm',
+                          selected: _previewMode == ReceiptPreviewMode.thermal58,
+                          onTap: () => setState(
+                            () => _previewMode = ReceiptPreviewMode.thermal58,
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.s8),
+                        _PreviewChip(
+                          label: '80 mm',
+                          selected: _previewMode == ReceiptPreviewMode.thermal80,
+                          onTap: () => setState(
+                            () => _previewMode = ReceiptPreviewMode.thermal80,
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.s8),
+                        _PreviewChip(
+                          label: 'PDF',
+                          selected: _previewMode == ReceiptPreviewMode.pdf,
+                          onTap: () => setState(
+                            () => _previewMode = ReceiptPreviewMode.pdf,
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.s8),
+                        _PreviewChip(
+                          label: 'WhatsApp',
+                          selected: _previewMode == ReceiptPreviewMode.whatsapp,
+                          onTap: () => setState(
+                            () => _previewMode = ReceiptPreviewMode.whatsapp,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Center(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.s20,
+                        vertical: AppSpacing.s16,
                       ),
-                    ],
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: ReceiptTheme.backgroundColor,
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.textPrimary.withValues(alpha: 0.12),
+                              blurRadius: 16,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: _buildPreview(receipt),
+                      ),
+                    ),
                   ),
-                  child: _buildPreview(),
                 ),
-              ),
+                ReceiptActionButtons(
+                  onPrint: () => _showSnackBar(
+                    'Mencetak struk (${_previewMode.name})...',
+                  ),
+                  onShareWhatsApp: () => _showSnackBar(
+                    'Membuka WhatsApp untuk membagikan struk...',
+                  ),
+                  onSavePdf: () => _showSnackBar(
+                    'Menyimpan struk sebagai PDF...',
+                  ),
+                ),
+              ],
             ),
-          ),
-          ReceiptActionButtons(
-            onPrint: () => _showDummySnackBar(
-              'Mencetak struk (${_previewMode.name})...',
-            ),
-            onShareWhatsApp: () => _showDummySnackBar(
-              'Membuka WhatsApp untuk membagikan struk...',
-            ),
-            onSavePdf: () => _showDummySnackBar(
-              'Menyimpan struk sebagai PDF...',
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

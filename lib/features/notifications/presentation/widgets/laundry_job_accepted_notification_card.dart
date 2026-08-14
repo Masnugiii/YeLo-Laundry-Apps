@@ -4,7 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_shadows.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
-import 'package:yelo_laundry_erp/features/notifications/data/dummy_cashier_notifications.dart';
+import 'package:yelo_laundry_erp/features/notifications/utils/notification_formatters.dart';
 import 'package:yelo_laundry_erp/features/notifications/models/laundry_job_accepted_notification.dart';
 
 class LaundryJobAcceptedNotificationCard extends StatelessWidget {

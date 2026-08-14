@@ -7,6 +7,8 @@ class CustomerWalletSummary {
     required this.balance,
     required this.currency,
     required this.isActive,
+    this.totalTopup = 0,
+    this.totalSpending = 0,
   });
 
   final String walletId;
@@ -14,6 +16,8 @@ class CustomerWalletSummary {
   final double balance;
   final String currency;
   final bool isActive;
+  final double totalTopup;
+  final double totalSpending;
 }
 
 class WalletRepository {
@@ -38,7 +42,7 @@ class WalletRepository {
       '/customers/$customerId/wallet/topup',
       data: {
         'amount': amount,
-        if (notes != null) 'notes': notes,
+        'notes': ?notes,
       },
       parser: (json) => json as Map<String, dynamic>,
     );
@@ -53,7 +57,7 @@ class WalletRepository {
       '/customers/$customerId/wallet/deduct',
       data: {
         'amount': amount,
-        if (notes != null) 'notes': notes,
+        'notes': ?notes,
       },
       parser: (json) => json as Map<String, dynamic>,
     );
@@ -87,6 +91,8 @@ class WalletRepository {
       balance: (json['balance'] as num?)?.toDouble() ?? 0,
       currency: json['currency'] as String? ?? 'IDR',
       isActive: json['isActive'] as bool? ?? true,
+      totalTopup: (json['totalTopup'] as num?)?.toDouble() ?? 0,
+      totalSpending: (json['totalSpending'] as num?)?.toDouble() ?? 0,
     );
   }
 }

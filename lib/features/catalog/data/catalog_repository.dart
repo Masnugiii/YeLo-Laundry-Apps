@@ -31,11 +31,16 @@ class CatalogRepository {
       _ => 0,
     };
 
-    final isWeightBased = json['weight'] as bool? ?? true;
+    final isWeightBased = switch ((json['unitType'] as String?)?.toLowerCase()) {
+      'piece' || 'item' => false,
+      'kg' => true,
+      _ => json['weight'] as bool? ?? true,
+    };
 
     return LaundryService(
       id: json['id'] as String,
       name: json['serviceName'] as String? ?? '',
+      code: json['serviceCode'] as String?,
       unitPrice: unitPrice,
       unit: isWeightBased ? ServiceUnit.perKg : ServiceUnit.perItem,
       description: json['description'] as String?,

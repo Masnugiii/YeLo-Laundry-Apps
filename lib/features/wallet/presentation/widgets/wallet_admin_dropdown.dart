@@ -20,6 +20,40 @@ class WalletAdminDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (admins.length <= 1) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Admin yang Bertanggung Jawab',
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: _labelColor,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.primary),
+            ),
+            child: Text(
+              selectedAdmin.name,
+              style: GoogleFonts.poppins(
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
     return DropdownMenu<WalletAdmin>(
       key: ValueKey(selectedAdmin.id),
       width: MediaQuery.sizeOf(context).width - 40,

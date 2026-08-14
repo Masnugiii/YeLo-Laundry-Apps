@@ -5,12 +5,27 @@ export interface MembershipLevel {
   name: string;
   minPoints: number;
   benefits: string[];
+  active?: boolean;
+}
+
+export interface LaundryPointRule {
+  enabled: boolean;
+  minimumTransaction: number;
+  pointsPerUnit: number;
+}
+
+export interface DepositPointRule {
+  enabled: boolean;
+  minimumDeposit: number;
+  pointsPerMultiplier: number;
 }
 
 export interface LoyaltySettings {
   pointPerRupiah: number;
   rupiahPerPoint: number;
   pointExpirationDays: number;
+  laundryPoint: LaundryPointRule;
+  depositPoint: DepositPointRule;
   membershipLevels: MembershipLevel[];
   cashback: {
     enabled: boolean;
@@ -23,6 +38,53 @@ export interface LoyaltySettings {
     minTopup: number;
     allowManualDebit: boolean;
   };
+}
+
+export type RewardCatalogType = "LAUNDRY_KG" | "PHYSICAL_GOODS";
+
+export interface RewardCatalogItem {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  type: RewardCatalogType;
+  costPoints: number;
+  isActive: boolean;
+  kg: number | null;
+  serviceType: string | null;
+  serviceDurationDays: number | null;
+  stock: number | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateRewardCatalogInput {
+  code: string;
+  name: string;
+  description?: string;
+  type: RewardCatalogType;
+  costPoints: number;
+  isActive?: boolean;
+  kg?: number;
+  serviceType?: string;
+  serviceDurationDays?: number;
+  stock?: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface UpdateRewardCatalogInput {
+  code?: string;
+  name?: string;
+  description?: string | null;
+  type?: RewardCatalogType;
+  costPoints?: number;
+  isActive?: boolean;
+  kg?: number | null;
+  serviceType?: string | null;
+  serviceDurationDays?: number | null;
+  stock?: number | null;
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface WalletDashboard {
@@ -96,8 +158,11 @@ export interface LoyaltyVoucher {
   id: string;
   code: string;
   name: string;
+  description?: string | null;
   discountType: "PERCENTAGE" | "FIXED";
   discountValue: number;
+  discountPercent?: number | null;
+  maxDiscount?: number | null;
   cashbackType: "PERCENTAGE" | "FIXED" | null;
   cashbackValue: number | null;
   cashbackMax: number | null;

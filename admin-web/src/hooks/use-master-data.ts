@@ -3,15 +3,18 @@ import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api";
 import type {
   CatalogService,
   CreateExpenseCategoryInput,
+  CreatePerfumeInput,
   CreateServiceInput,
   CreateServicePriceInput,
   ExpenseCategory,
+  LaundryPerfume,
   NumberingSequence,
   PaymentMethod,
   ServicePrice,
   UpdateExpenseCategoryInput,
   UpdateNumberingInput,
   UpdatePaymentMethodInput,
+  UpdatePerfumeInput,
   UpdateServiceInput,
 } from "@/types/master-data";
 
@@ -62,8 +65,10 @@ export function useCreateServicePrice() {
   return useMutation({
     mutationFn: (input: CreateServicePriceInput) =>
       apiPost<ServicePrice>("/catalog/prices", input),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: [MASTER_DATA_QUERY_KEY, "prices"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [MASTER_DATA_QUERY_KEY, "prices"] });
+      queryClient.invalidateQueries({ queryKey: [MASTER_DATA_QUERY_KEY, "services"] });
+    },
   });
 }
 
@@ -159,5 +164,42 @@ export function useDeleteExpenseCategory() {
       queryClient.invalidateQueries({
         queryKey: [MASTER_DATA_QUERY_KEY, "expense-categories"],
       }),
+  });
+}
+
+export function usePerfumes() {
+  return useQuery({
+    queryKey: [MASTER_DATA_QUERY_KEY, "perfumes"],
+    queryFn: () => apiGet<LaundryPerfume[]>("/perfumes"),
+  });
+}
+
+export function useCreatePerfume() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreatePerfumeInput) =>
+      apiPost<LaundryPerfume>("/perfumes", input),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: [MASTER_DATA_QUERY_KEY, "perfumes"] }),
+  });
+}
+
+export function useUpdatePerfume(perfumeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdatePerfumeInput) =>
+      apiPatch<LaundryPerfume>(`/perfumes/${perfumeId}`, input),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: [MASTER_DATA_QUERY_KEY, "perfumes"] }),
+  });
+}
+
+export function useDeletePerfume() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (perfumeId: string) =>
+      apiDelete<LaundryPerfume>(`/perfumes/${perfumeId}`),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: [MASTER_DATA_QUERY_KEY, "perfumes"] }),
   });
 }

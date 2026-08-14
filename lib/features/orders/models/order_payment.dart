@@ -94,11 +94,6 @@ class OrderPaymentConfirmation {
   String get paymentTimeLabel => formatPaymentTime(paidAt);
 }
 
-const dummyTransferBankName = 'BCA';
-const dummyTransferAccountNumber = '1234567890';
-const dummyTransferAccountName = 'Yelo Laundry';
-const dummyCustomerWalletBalance = 500000;
-
 PaymentPickupDelivery fulfillmentToPaymentPickup(FulfillmentType type) {
   return switch (type) {
     FulfillmentType.selfPickup => PaymentPickupDelivery.datangSendiri,

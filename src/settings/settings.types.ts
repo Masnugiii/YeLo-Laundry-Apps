@@ -8,11 +8,13 @@ export const SETTINGS_SECTIONS = [
   'wallet',
   'delivery',
   'attendance',
+  'payment',
   'payment_methods',
   'expense_categories',
   'notifications',
   'backup',
   'documents',
+  'receipt',
   'numbering',
 ] as const;
 
@@ -24,8 +26,11 @@ export const WRITABLE_SETTINGS_SECTIONS: readonly SettingsSection[] = [
   'payroll',
   'loyalty',
   'attendance',
+  'payment',
   'notifications',
   'documents',
+  'receipt',
+  'numbering',
   'backup',
 ] as const;
 
@@ -105,6 +110,11 @@ export const SETTINGS_SECTION_META: Record<
     writable: true,
     description: 'Work hours, late tolerance, overtime, and GPS defaults',
   },
+  payment: {
+    label: 'Payment',
+    writable: true,
+    description: 'Customer app QRIS and bank transfer payment configuration',
+  },
   payment_methods: {
     label: 'Payment Methods',
     writable: false,
@@ -130,9 +140,14 @@ export const SETTINGS_SECTION_META: Record<
     writable: true,
     description: 'Upload limits and file type rules',
   },
+  receipt: {
+    label: 'Receipt Customization',
+    writable: true,
+    description: 'Receipt display and footer configuration',
+  },
   numbering: {
     label: 'Business Numbering',
-    writable: false,
+    writable: true,
     description: 'ORD/INV/EXP/PAY/CST/EMP numbering configuration',
   },
 };

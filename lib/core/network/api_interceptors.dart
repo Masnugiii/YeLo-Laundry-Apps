@@ -7,11 +7,10 @@ typedef UnauthorizedHandler = Future<void> Function();
 
 class TokenInterceptor extends Interceptor {
   TokenInterceptor({
-    required SecureStorageService secureStorage,
-    required Dio refreshDio,
+    required this._secureStorage,
+    required this._refreshDio,
     this.onUnauthorized,
-  })  : _secureStorage = secureStorage,
-        _refreshDio = refreshDio;
+  });
 
   final SecureStorageService _secureStorage;
   final Dio _refreshDio;

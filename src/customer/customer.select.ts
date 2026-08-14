@@ -8,6 +8,7 @@ export const customerListSelect = {
   email: true,
   gender: true,
   birthDate: true,
+  occupation: true,
   photoUrl: true,
   isActive: true,
   createdAt: true,

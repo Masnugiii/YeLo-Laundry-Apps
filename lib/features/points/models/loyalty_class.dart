@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+/// Display-only membership badge colors/labels.
+/// Thresholds and benefits MUST come from backend membership payload —
+/// do not use [minPoints] for business decisions.
 enum LoyaltyClass {
   bronze,
   silver,
@@ -25,17 +28,19 @@ class LoyaltyProgress {
 
 extension LoyaltyClassX on LoyaltyClass {
   String get label => switch (this) {
-        LoyaltyClass.bronze => 'Bronze',
+        LoyaltyClass.bronze => 'Regular',
         LoyaltyClass.silver => 'Silver',
         LoyaltyClass.gold => 'Gold',
         LoyaltyClass.platinum => 'Platinum',
       };
 
+  /// Fallback display thresholds aligned with DEFAULT_LOYALTY_SETTINGS.
+  /// Prefer [loyaltyClassFromCode] / membership API when available.
   int get minPoints => switch (this) {
         LoyaltyClass.bronze => 0,
-        LoyaltyClass.silver => 1000,
-        LoyaltyClass.gold => 3000,
-        LoyaltyClass.platinum => 7000,
+        LoyaltyClass.silver => 500,
+        LoyaltyClass.gold => 1500,
+        LoyaltyClass.platinum => 3000,
       };
 
   Color get badgeBackground => switch (this) {
@@ -53,10 +58,10 @@ extension LoyaltyClassX on LoyaltyClass {
       };
 
   String get pointRange => switch (this) {
-        LoyaltyClass.bronze => '0 – 999 Point',
-        LoyaltyClass.silver => '1.000 – 2.999 Point',
-        LoyaltyClass.gold => '3.000 – 6.999 Point',
-        LoyaltyClass.platinum => '7.000+ Point',
+        LoyaltyClass.bronze => '0 – 499 Point',
+        LoyaltyClass.silver => '500 – 1.499 Point',
+        LoyaltyClass.gold => '1.500 – 2.999 Point',
+        LoyaltyClass.platinum => '3.000+ Point',
       };
 
   LoyaltyClass? get nextClass => switch (this) {
@@ -67,33 +72,38 @@ extension LoyaltyClassX on LoyaltyClass {
       };
 
   List<String> get benefits => switch (this) {
-        LoyaltyClass.bronze => ['Basic Member'],
-        LoyaltyClass.silver => [
-            'Bonus Point',
-            'Priority Promotion',
-          ],
-        LoyaltyClass.gold => [
-            'Higher Bonus Point',
-            'Special Promotion',
-            'Birthday Reward',
-          ],
-        LoyaltyClass.platinum => [
-            'Highest Bonus Point',
-            'Exclusive Promotion',
-            'Priority Service',
-            'Special Gift',
-          ],
+        LoyaltyClass.bronze => const [],
+        LoyaltyClass.silver => ['Free Pickup'],
+        LoyaltyClass.gold => ['Free Delivery'],
+        LoyaltyClass.platinum => ['10% Discount', 'Priority Queue'],
       };
 }
 
+LoyaltyClass loyaltyClassFromCode(String? code) {
+  switch ((code ?? '').toUpperCase()) {
+    case 'SILVER':
+      return LoyaltyClass.silver;
+    case 'GOLD':
+      return LoyaltyClass.gold;
+    case 'PLATINUM':
+      return LoyaltyClass.platinum;
+    case 'REGULAR':
+    case 'BRONZE':
+    default:
+      return LoyaltyClass.bronze;
+  }
+}
+
+/// Fallback when membership API is unavailable.
+/// Thresholds match backend DEFAULT_LOYALTY_SETTINGS.
 LoyaltyClass loyaltyClassFromPoints(int points) {
-  if (points >= 7000) {
+  if (points >= 3000) {
     return LoyaltyClass.platinum;
   }
-  if (points >= 3000) {
+  if (points >= 1500) {
     return LoyaltyClass.gold;
   }
-  if (points >= 1000) {
+  if (points >= 500) {
     return LoyaltyClass.silver;
   }
   return LoyaltyClass.bronze;
@@ -112,7 +122,10 @@ LoyaltyProgress loyaltyProgressFromPoints(int points) {
     );
   }
 
-  final progress = (points / nextClass.minPoints).clamp(0.0, 1.0);
+  final span = nextClass.minPoints - currentClass.minPoints;
+  final progress = span <= 0
+      ? 1.0
+      : ((points - currentClass.minPoints) / span).clamp(0.0, 1.0);
 
   return LoyaltyProgress(
     currentClass: currentClass,

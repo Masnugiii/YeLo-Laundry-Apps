@@ -4,8 +4,11 @@ UserRole mapBackendRoleToUserRole(List<String> roles) {
   if (roles.contains('OWNER')) {
     return UserRole.owner;
   }
-  if (roles.contains('MANAGER') || roles.contains('DRIVER')) {
+  if (roles.contains('MANAGER')) {
     return UserRole.cashierLaundryDriver;
+  }
+  if (roles.contains('DRIVER')) {
+    return UserRole.driver;
   }
   if (roles.contains('OPERATOR')) {
     return UserRole.cashierLaundry;

@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:yelo_laundry_erp/core/network/api_exception.dart';
@@ -38,18 +37,14 @@ class AuthState {
 }
 
 class AuthNotifier extends Notifier<AuthState> {
+  bool _restoreScheduled = false;
+
   @override
   AuthState build() {
-    if (kDebugMode) {
-      // Development builds always start at the login screen so the user can
-      // choose an operational mode before authenticating.
-      return const AuthState(
-        status: AuthStatus.unauthenticated,
-        session: AppUserSession.guest,
-      );
+    if (!_restoreScheduled) {
+      _restoreScheduled = true;
+      Future.microtask(restoreSession);
     }
-
-    Future.microtask(restoreSession);
     return const AuthState(
       status: AuthStatus.initial,
       session: AppUserSession.guest,
@@ -85,7 +80,9 @@ class AuthNotifier extends Notifier<AuthState> {
     required String phone,
     required String password,
   }) async {
-    state = state.copyWith(status: AuthStatus.loading, errorMessage: null);
+    // Keep UI on LoginScreen (its own submit spinner). Do not flip global
+    // status to loading — that would redirect back to the startup splash.
+    state = state.copyWith(errorMessage: null);
 
     try {
       final session = await ref.read(authRepositoryProvider).login(

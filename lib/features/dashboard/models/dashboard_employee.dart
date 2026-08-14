@@ -2,7 +2,7 @@ import 'package:yelo_laundry_erp/features/employee_master/models/employee.dart';
 
 /// Signed-in employee context for the dashboard header.
 ///
-/// Future integration: replace [dummyDashboardEmployee] with the authenticated
+/// Dashboard employee profile shown in the header.
 /// employee from Employee Master (`fullName`, `gender`, `role`).
 class DashboardEmployee {
   const DashboardEmployee({

@@ -25,7 +25,7 @@ import { Permissions } from '../auth/decorators/permissions.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { AuthenticatedEmployee } from '../auth/interfaces/jwt-payload.interface';
 import { AllowCustomerActor } from './decorators/allow-customer-actor.decorator';
-import { CustomerSelfGuard } from './guards/customer-self.guard';
+import { CustomerWalletViewGuard } from './guards/customer-wallet-view.guard';
 import { ApiSuccessResponse } from '../common/interfaces/api-response.interface';
 import { AdjustWalletDto } from './dto/adjust-wallet.dto';
 import { DeductWalletDto } from './dto/deduct-wallet.dto';
@@ -67,26 +67,16 @@ const TRANSACTION_EXAMPLE = {
   createdAt: '2026-08-08T06:00:00.000Z',
 };
 
-const VIEW_ROLES = [
-  ROLES.OWNER,
-  ROLES.MANAGER,
-  ROLES.CASHIER,
-  ROLES.OPERATOR,
-] as const;
-
-const MUTATION_ROLES = [ROLES.OWNER, ROLES.CASHIER] as const;
-
 @ApiTags('Customer Wallet')
 @ApiBearerAuth('access-token')
-@Permissions(PERMISSIONS.WALLET)
 @Controller('customers/:customerId/wallet')
 export class CustomerWalletController {
   constructor(private readonly walletService: CustomerWalletService) {}
 
   @Get()
+  @Permissions(PERMISSIONS.WALLET)
   @AllowCustomerActor()
-  @UseGuards(CustomerSelfGuard)
-  @Roles(...VIEW_ROLES)
+  @UseGuards(CustomerWalletViewGuard)
   @ApiOperation({
     summary: 'Get customer wallet summary',
     description:
@@ -114,9 +104,9 @@ export class CustomerWalletController {
   }
 
   @Get('transactions')
+  @Permissions(PERMISSIONS.WALLET)
   @AllowCustomerActor()
-  @UseGuards(CustomerSelfGuard)
-  @Roles(...VIEW_ROLES)
+  @UseGuards(CustomerWalletViewGuard)
   @ApiOperation({
     summary: 'List wallet transaction history',
     description:
@@ -148,7 +138,7 @@ export class CustomerWalletController {
   }
 
   @Post('topup')
-  @Roles(...MUTATION_ROLES)
+  @Permissions(PERMISSIONS.WALLET_TOPUP)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Top up customer wallet',
@@ -195,7 +185,7 @@ export class CustomerWalletController {
   }
 
   @Post('deduct')
-  @Roles(...MUTATION_ROLES)
+  @Permissions(PERMISSIONS.WALLET_DEDUCT)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Deduct customer wallet balance',

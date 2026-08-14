@@ -6,7 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
 import 'package:yelo_laundry_erp/core/providers/core_providers.dart';
-import 'package:yelo_laundry_erp/features/expenses/data/dummy_expenses.dart';
+import 'package:yelo_laundry_erp/features/staff/providers/staff_admin_provider.dart';
 import 'package:yelo_laundry_erp/features/expenses/models/expense.dart';
 import 'package:yelo_laundry_erp/features/expenses/presentation/expense_theme.dart';
 import 'package:yelo_laundry_erp/features/wallet/presentation/widgets/wallet_sheet_widgets.dart';
@@ -65,7 +65,7 @@ class _AddExpenseBottomSheetState extends ConsumerState<_AddExpenseBottomSheet> 
   final _descriptionController = TextEditingController();
 
   ExpenseCategory _selectedCategory = ExpenseCategory.pengeluaranSampah;
-  ExpenseAdmin _selectedAdmin = dummyCurrentExpenseAdmin;
+  ExpenseAdmin? _selectedAdmin;
   late final DateTime _dateTime;
   bool _isSaving = false;
 
@@ -133,7 +133,7 @@ class _AddExpenseBottomSheetState extends ConsumerState<_AddExpenseBottomSheet> 
         id: response['id'] as String? ?? '',
         category: _selectedCategory,
         amount: amount,
-        adminName: _selectedAdmin.name,
+        adminName: _selectedAdmin?.name ?? 'Staff',
         dateTime: _dateTime,
         description:
             description == null || description.isEmpty ? null : description,
@@ -161,7 +161,69 @@ class _AddExpenseBottomSheetState extends ConsumerState<_AddExpenseBottomSheet> 
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     final isLainnya = _selectedCategory == ExpenseCategory.lainnya;
+    final adminsAsync = ref.watch(expenseAdminOptionsProvider);
 
+    return adminsAsync.when(
+      loading: () => Padding(
+        padding: EdgeInsets.fromLTRB(
+          AppSpacing.s20,
+          AppSpacing.s12,
+          AppSpacing.s20,
+          AppSpacing.s20 + bottomInset,
+        ),
+        child: const Center(child: CircularProgressIndicator()),
+      ),
+      error: (_, _) => Padding(
+        padding: EdgeInsets.fromLTRB(
+          AppSpacing.s20,
+          AppSpacing.s12,
+          AppSpacing.s20,
+          AppSpacing.s20 + bottomInset,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const WalletSheetHandle(),
+            const SizedBox(height: AppSpacing.s16),
+            Text(
+              'Gagal memuat daftar admin.',
+              style: GoogleFonts.poppins(color: AppColors.error),
+            ),
+            const SizedBox(height: AppSpacing.s12),
+            FilledButton(
+              onPressed: () => ref.invalidate(expenseAdminOptionsProvider),
+              child: const Text('Coba Lagi'),
+            ),
+          ],
+        ),
+      ),
+      data: (admins) {
+        final selectedAdmin =
+            _selectedAdmin ?? currentExpenseAdmin(admins);
+        if (_selectedAdmin == null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) setState(() => _selectedAdmin = selectedAdmin);
+          });
+        }
+
+        return _buildForm(
+          context,
+          bottomInset: bottomInset,
+          isLainnya: isLainnya,
+          admins: admins,
+          selectedAdmin: selectedAdmin,
+        );
+      },
+    );
+  }
+
+  Widget _buildForm(
+    BuildContext context, {
+    required double bottomInset,
+    required bool isLainnya,
+    required List<ExpenseAdmin> admins,
+    required ExpenseAdmin selectedAdmin,
+  }) {
     return Padding(
       padding: EdgeInsets.fromLTRB(
         AppSpacing.s20,
@@ -281,9 +343,9 @@ class _AddExpenseBottomSheetState extends ConsumerState<_AddExpenseBottomSheet> 
             ),
             const SizedBox(height: AppSpacing.s16),
             DropdownMenu<ExpenseAdmin>(
-              key: ValueKey(_selectedAdmin.id),
+              key: ValueKey(selectedAdmin.id),
               width: MediaQuery.sizeOf(context).width - 40,
-              initialSelection: _selectedAdmin,
+              initialSelection: selectedAdmin,
               textStyle: GoogleFonts.poppins(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
@@ -294,7 +356,7 @@ class _AddExpenseBottomSheetState extends ConsumerState<_AddExpenseBottomSheet> 
                 style: ExpenseTheme.labelStyle(),
               ),
               dropdownMenuEntries: [
-                for (final admin in dummyExpenseAdmins)
+                for (final admin in admins)
                   DropdownMenuEntry(
                     value: admin,
                     label: admin.name,

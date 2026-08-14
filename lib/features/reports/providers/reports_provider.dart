@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/core/providers/core_providers.dart';
+import 'package:yelo_laundry_erp/features/reports/data/reports_repository.dart';
 import 'package:yelo_laundry_erp/features/reports/models/report_models.dart';
 
 class FinancialReportData {
@@ -12,6 +13,8 @@ class FinancialReportData {
     required this.paymentAnalytics,
     required this.topServices,
     required this.topCustomers,
+    required this.binatuPerformance,
+    required this.employeePerformance,
   });
 
   final FinancialOverview overview;
@@ -19,6 +22,8 @@ class FinancialReportData {
   final List<PaymentAnalytic> paymentAnalytics;
   final List<TopService> topServices;
   final List<TopCustomer> topCustomers;
+  final BinatuPerformance binatuPerformance;
+  final List<EmployeePerformance> employeePerformance;
 }
 
 String reportPeriodToApi(ReportPeriodFilter filter) {
@@ -34,6 +39,8 @@ String reportPeriodToApi(ReportPeriodFilter filter) {
 FinancialReportData mapFinancialReportData({
   required Map<String, dynamic> summary,
   required Map<String, dynamic> dashboard,
+  required Map<String, dynamic> production,
+  required Map<String, dynamic> employees,
 }) {
   final profitLoss =
       summary['profitLoss'] as Map<String, dynamic>? ?? const {};
@@ -117,6 +124,8 @@ FinancialReportData mapFinancialReportData({
         .toList(),
     topServices: topServices,
     topCustomers: topCustomers,
+    binatuPerformance: mapProductionToBinatuPerformance(production),
+    employeePerformance: mapEmployeePerformanceReport(employees),
   );
 }
 
@@ -124,16 +133,21 @@ final financialReportProvider =
     FutureProvider.family<FinancialReportData, ReportPeriodFilter>(
   (ref, period) async {
     final repository = ref.watch(financeRepositoryProvider);
+    final reportsRepository = ref.watch(reportsRepositoryProvider);
     final apiPeriod = reportPeriodToApi(period);
 
     final results = await Future.wait([
       repository.fetchFinancialSummary(period: apiPeriod),
       repository.fetchDashboard(),
+      reportsRepository.fetchProductionForReportPeriod(period),
+      reportsRepository.fetchEmployeesForReportPeriod(period),
     ]);
 
     return mapFinancialReportData(
       summary: results[0],
       dashboard: results[1],
+      production: results[2],
+      employees: results[3],
     );
   },
 );

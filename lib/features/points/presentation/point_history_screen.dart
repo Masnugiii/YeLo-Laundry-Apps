@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
-import 'package:yelo_laundry_erp/features/customer/data/dummy_customers.dart';
-import 'package:yelo_laundry_erp/features/customer/models/customer.dart';
+import 'package:yelo_laundry_erp/features/points/providers/point_history_provider.dart';
 import 'package:yelo_laundry_erp/features/customer/presentation/widgets/customer_fab.dart';
-import 'package:yelo_laundry_erp/features/points/data/dummy_point_transactions.dart';
 import 'package:yelo_laundry_erp/features/points/models/loyalty_class.dart';
 import 'package:yelo_laundry_erp/features/points/models/point_transaction.dart';
 import 'package:yelo_laundry_erp/features/points/presentation/widgets/loyalty_class_card.dart';
 import 'package:yelo_laundry_erp/features/points/presentation/widgets/loyalty_summary_card.dart';
 import 'package:yelo_laundry_erp/features/points/presentation/widgets/point_history_card.dart';
+import 'package:yelo_laundry_erp/shared/widgets/api_state_widgets.dart';
 import 'package:yelo_laundry_erp/shared/widgets/selectable_chip.dart';
 
-class PointHistoryScreen extends StatefulWidget {
+class PointHistoryScreen extends ConsumerStatefulWidget {
   const PointHistoryScreen({
     super.key,
     required this.customerId,
@@ -23,10 +23,10 @@ class PointHistoryScreen extends StatefulWidget {
   final String customerId;
 
   @override
-  State<PointHistoryScreen> createState() => _PointHistoryScreenState();
+  ConsumerState<PointHistoryScreen> createState() => _PointHistoryScreenState();
 }
 
-class _PointHistoryScreenState extends State<PointHistoryScreen> {
+class _PointHistoryScreenState extends ConsumerState<PointHistoryScreen> {
   static const _filters = PointHistoryFilter.values;
 
   final _searchController = TextEditingController();
@@ -38,30 +38,15 @@ class _PointHistoryScreenState extends State<PointHistoryScreen> {
     super.dispose();
   }
 
-  Customer? _findCustomer() {
-    for (final item in dummyCustomers) {
-      if (item.id == widget.customerId) {
-        return item;
-      }
-    }
-    return null;
-  }
-
-  List<PointTransaction> _filteredTransactions() {
+  List<PointTransaction> _filteredTransactions(List<PointTransaction> transactions) {
     final query = _searchController.text.trim().toLowerCase();
-    final transactions = pointTransactionsForCustomer(widget.customerId);
 
     return transactions.where((transaction) {
       final matchesFilter = _selectedFilter == PointHistoryFilter.all ||
           transaction.source.filterCategory == _selectedFilter;
 
-      if (!matchesFilter) {
-        return false;
-      }
-
-      if (query.isEmpty) {
-        return true;
-      }
+      if (!matchesFilter) return false;
+      if (query.isEmpty) return true;
 
       return transaction.formattedDate.toLowerCase().contains(query) ||
           transaction.referenceNumber.toLowerCase().contains(query);
@@ -70,8 +55,9 @@ class _PointHistoryScreenState extends State<PointHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final customer = _findCustomer();
-    final transactions = _filteredTransactions();
+    final customerAsync = ref.watch(pointHistoryCustomerProvider(widget.customerId));
+    final historyAsync =
+        ref.watch(pointHistoryTransactionsProvider(widget.customerId));
 
     return Scaffold(
       backgroundColor: AppColors.dashboardBackground,
@@ -90,19 +76,35 @@ class _PointHistoryScreenState extends State<PointHistoryScreen> {
             color: AppColors.onPrimary,
           ),
         ),
+        actions: [
+          IconButton(
+            onPressed: () => ref.invalidate(
+              pointHistoryTransactionsProvider(widget.customerId),
+            ),
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
       ),
-      body: customer == null
-          ? Center(
-              child: Text(
-                'Pelanggan tidak ditemukan',
-                style: GoogleFonts.poppins(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-            )
-          : Column(
+      body: customerAsync.when(
+        loading: () => const ApiLoadingView(message: 'Memuat data pelanggan...'),
+        error: (error, _) => ApiErrorView(
+          message: messageFromError(error),
+          onRetry: () => ref.invalidate(
+            pointHistoryCustomerProvider(widget.customerId),
+          ),
+        ),
+        data: (customer) => historyAsync.when(
+          loading: () => const ApiLoadingView(message: 'Memuat riwayat point...'),
+          error: (error, _) => ApiErrorView(
+            message: messageFromError(error),
+            onRetry: () => ref.invalidate(
+              pointHistoryTransactionsProvider(widget.customerId),
+            ),
+          ),
+          data: (transactions) {
+            final filtered = _filteredTransactions(transactions);
+
+            return Column(
               children: [
                 Padding(
                   padding: const EdgeInsets.fromLTRB(
@@ -203,7 +205,7 @@ class _PointHistoryScreenState extends State<PointHistoryScreen> {
                       LoyaltyClassCard(
                         loyaltyClass: loyaltyClassFromPoints(customer.points),
                       ),
-                      if (transactions.isEmpty)
+                      if (filtered.isEmpty)
                         Padding(
                           padding: const EdgeInsets.symmetric(
                             vertical: AppSpacing.s32,
@@ -220,13 +222,16 @@ class _PointHistoryScreenState extends State<PointHistoryScreen> {
                           ),
                         )
                       else
-                        for (final transaction in transactions)
+                        for (final transaction in filtered)
                           PointHistoryCard(transaction: transaction),
                     ],
                   ),
                 ),
               ],
-            ),
+            );
+          },
+        ),
+      ),
     );
   }
 }

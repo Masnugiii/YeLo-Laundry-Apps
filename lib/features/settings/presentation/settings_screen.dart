@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
+import 'package:yelo_laundry_erp/features/dashboard/presentation/widgets/back_to_dashboard_link.dart';
 import 'package:yelo_laundry_erp/features/settings/models/settings_models.dart';
 import 'package:yelo_laundry_erp/features/settings/presentation/widgets/ironing_queue_priority_settings_section.dart';
 import 'package:yelo_laundry_erp/features/settings/presentation/widgets/system_config_settings_section.dart';
@@ -12,15 +13,18 @@ import 'package:yelo_laundry_erp/features/settings/presentation/widgets/order_se
 import 'package:yelo_laundry_erp/features/settings/presentation/widgets/reminder_recipient_section.dart';
 import 'package:yelo_laundry_erp/features/settings/presentation/widgets/security_settings_section.dart';
 import 'package:yelo_laundry_erp/features/settings/presentation/widgets/service_reminder_section.dart';
+import 'package:yelo_laundry_erp/features/settings/presentation/widgets/account_logout_section.dart';
 import 'package:yelo_laundry_erp/features/settings/presentation/widgets/whatsapp_reminder_section.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
     super.key,
     this.showBackButton = true,
+    this.showBackToDashboard = false,
   });
 
   final bool showBackButton;
+  final bool showBackToDashboard;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -41,10 +45,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.onPrimary,
         elevation: 0,
-        automaticallyImplyLeading: widget.showBackButton,
+        automaticallyImplyLeading:
+            widget.showBackButton && !widget.showBackToDashboard,
+        leading: widget.showBackToDashboard
+            ? const DashboardAppBarBackButton()
+            : null,
         iconTheme: const IconThemeData(color: AppColors.onPrimary),
         title: Text(
-          'Settings',
+          widget.showBackToDashboard ? 'Akun' : 'Settings',
           style: GoogleFonts.poppins(
             fontSize: 22,
             fontWeight: FontWeight.w700,
@@ -112,6 +120,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: AppSpacing.s16),
           const AboutSettingsSection(aboutInfo: defaultAppAboutInfo),
+          const SizedBox(height: AppSpacing.s16),
+          const AccountLogoutSection(),
         ],
       ),
     );

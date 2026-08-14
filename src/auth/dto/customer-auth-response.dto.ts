@@ -26,6 +26,9 @@ export class CustomerAuthUserDto {
 
   @ApiPropertyOptional()
   photoUrl?: string | null;
+
+  @ApiPropertyOptional({ example: 'CUS-0004827' })
+  customerCode?: string;
 }
 
 export class CustomerAuthResponseDto {

@@ -27,16 +27,27 @@ import {
 } from '../dto/customer-profile.dto';
 import { SendOtpDto } from '../dto/send-otp.dto';
 import { VerifyOtpDto } from '../dto/verify-otp.dto';
+import {
+  RequestChangePhoneDto,
+  VerifyChangePhoneDto,
+} from '../dto/change-phone.dto';
 import { CustomerJwtPayload } from '../interfaces/jwt-payload.interface';
 import { normalizePhone } from '../utils/phone.util';
 import { parseDurationToMs } from '../utils/token.util';
 import { OtpRepository } from './otp.repository';
+import { DevOtpPlaintextStore } from '../../dev/dev-otp-plaintext.store';
 
 const BCRYPT_ROUNDS = 10;
 const OTP_EXPIRY_SECONDS = 300;
 const OTP_RATE_LIMIT = 3;
 const OTP_RATE_WINDOW_MS = 15 * 60 * 1000;
 const MAX_OTP_ATTEMPTS = 5;
+
+export interface IssuedOtpRecord {
+  otp: Awaited<ReturnType<OtpRepository['createOtp']>>;
+  code: string;
+  expiresIn: number;
+}
 
 @Injectable()
 export class OtpService {
@@ -47,7 +58,58 @@ export class OtpService {
     private readonly customerRepository: CustomerRepository,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly devOtpPlaintextStore: DevOtpPlaintextStore,
   ) {}
+
+  async issueOtpRecord(
+    phone: string,
+    purpose: OtpPurpose,
+  ): Promise<IssuedOtpRecord> {
+    if (purpose === OtpPurpose.login) {
+      const customer = await this.customerRepository.findActiveByPhone(phone);
+
+      if (!customer) {
+        throw new NotFoundException('Customer account not found');
+      }
+    }
+
+    if (purpose === OtpPurpose.register) {
+      const existing = await this.customerRepository.findByPhone(phone);
+
+      if (existing) {
+        throw new ConflictException('Phone number already registered');
+      }
+    }
+
+    if (purpose === OtpPurpose.phone_change) {
+      const existing = await this.customerRepository.findByPhone(phone);
+
+      if (existing) {
+        throw new ConflictException('Phone number already registered');
+      }
+    }
+
+    const code = randomInt(100000, 999999).toString();
+    const codeHash = await bcrypt.hash(code, BCRYPT_ROUNDS);
+    const expiresAt = new Date(Date.now() + OTP_EXPIRY_SECONDS * 1000);
+
+    const otp = await this.otpRepository.createOtp({
+      phone,
+      codeHash,
+      purpose,
+      expiresAt,
+    });
+
+    if (this.configService.get<string>('app.env') !== 'production') {
+      this.devOtpPlaintextStore.remember(otp.id, code, expiresAt);
+    }
+
+    return {
+      otp,
+      code,
+      expiresIn: OTP_EXPIRY_SECONDS,
+    };
+  }
 
   async sendOtp(
     dto: SendOtpDto,
@@ -63,43 +125,20 @@ export class OtpService {
       );
     }
 
-    if (dto.purpose === OtpPurpose.login) {
-      const customer = await this.customerRepository.findActiveByPhone(phone);
+    const issued = await this.issueOtpRecord(phone, dto.purpose);
 
-      if (!customer) {
-        throw new NotFoundException('Customer account not found');
-      }
+    if (this.configService.get<string>('app.env') !== 'production') {
+      this.logger.debug(
+        `OTP reference for ${this.maskPhone(phone)} purpose=${dto.purpose}: ${issued.code}`,
+      );
     }
-
-    if (dto.purpose === OtpPurpose.register) {
-      const existing = await this.customerRepository.findByPhone(phone);
-
-      if (existing) {
-        throw new ConflictException('Phone number already registered');
-      }
-    }
-
-    const code = randomInt(100000, 999999).toString();
-    const codeHash = await bcrypt.hash(code, BCRYPT_ROUNDS);
-    const expiresAt = new Date(Date.now() + OTP_EXPIRY_SECONDS * 1000);
-
-    const otp = await this.otpRepository.createOtp({
-      phone,
-      codeHash,
-      purpose: dto.purpose,
-      expiresAt,
-    });
-
-    this.logger.log(
-      `OTP sent to ${this.maskPhone(phone)} purpose=${dto.purpose} code=${code}`,
-    );
 
     return {
       success: true,
       message: 'OTP sent successfully',
       data: {
-        otpRequestId: otp.id,
-        expiresIn: OTP_EXPIRY_SECONDS,
+        otpRequestId: issued.otp.id,
+        expiresIn: issued.expiresIn,
         maskedPhone: this.maskPhone(phone),
       },
     };
@@ -132,6 +171,7 @@ export class OtpService {
         fullName: customer.fullName,
         email: customer.email,
         photoUrl: customer.photoUrl,
+        customerCode: customer.customerCode,
       }),
     };
   }
@@ -165,6 +205,8 @@ export class OtpService {
       phone,
       email: dto.email?.trim().toLowerCase() ?? null,
       gender: dto.gender,
+      age: dto.age,
+      occupation: dto.occupation.trim(),
       isActive: true,
     });
 
@@ -179,6 +221,7 @@ export class OtpService {
         fullName: customer.fullName,
         email: customer.email,
         photoUrl: customer.photoUrl,
+        customerCode: customer.customerCode,
       }),
     };
   }
@@ -206,6 +249,7 @@ export class OtpService {
         gender: detail.gender,
         birthDate: detail.birthDate?.toISOString() ?? null,
         photoUrl: detail.photoUrl,
+        occupation: customer.occupation,
         loyaltyPoints: detail.loyaltyPoints,
         walletBalance: detail.walletBalance,
       },
@@ -239,7 +283,103 @@ export class OtpService {
         email: dto.email ? dto.email.trim().toLowerCase() : null,
       }),
       ...(dto.photoUrl !== undefined && { photoUrl: dto.photoUrl }),
+      ...(dto.birthDate !== undefined && { birthDate: dto.birthDate }),
+      ...(dto.occupation !== undefined && {
+        occupation: dto.occupation.trim() || null,
+      }),
     });
+
+    return this.getCustomerProfile(customerId);
+  }
+
+  async requestCustomerPhoneChange(
+    customerId: string,
+    dto: RequestChangePhoneDto,
+  ): Promise<ApiSuccessResponse<SendOtpResponseDto>> {
+    const phone = normalizePhone(dto.phone);
+    const customer = await this.customerRepository.findById(customerId);
+
+    if (!customer) {
+      throw new NotFoundException('Customer not found');
+    }
+
+    if (normalizePhone(customer.phone) === phone) {
+      throw new BadRequestException(
+        'New phone number must be different from the current number',
+      );
+    }
+
+    const duplicate = await this.customerRepository.findByPhone(phone, customerId);
+
+    if (duplicate) {
+      throw new ConflictException('Phone number already registered');
+    }
+
+    const since = new Date(Date.now() - OTP_RATE_WINDOW_MS);
+    const recentCount = await this.otpRepository.countRecentByPhone(phone, since);
+
+    if (recentCount >= OTP_RATE_LIMIT) {
+      throw new HttpException(
+        'Too many OTP requests. Please try again later.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    const issued = await this.issueOtpRecord(phone, OtpPurpose.phone_change);
+
+    if (this.configService.get<string>('app.env') !== 'production') {
+      this.logger.debug(
+        `OTP reference for ${this.maskPhone(phone)} purpose=${OtpPurpose.phone_change}: ${issued.code}`,
+      );
+    }
+
+    return {
+      success: true,
+      message: 'OTP sent successfully',
+      data: {
+        otpRequestId: issued.otp.id,
+        expiresIn: issued.expiresIn,
+        maskedPhone: this.maskPhone(phone),
+      },
+    };
+  }
+
+  async verifyCustomerPhoneChange(
+    customerId: string,
+    dto: VerifyChangePhoneDto,
+  ): Promise<ApiSuccessResponse<CustomerProfileResponseDto>> {
+    const phone = normalizePhone(dto.phone);
+    const customer = await this.customerRepository.findById(customerId);
+
+    if (!customer) {
+      throw new NotFoundException('Customer not found');
+    }
+
+    if (normalizePhone(customer.phone) === phone) {
+      throw new BadRequestException(
+        'New phone number must be different from the current number',
+      );
+    }
+
+    const duplicate = await this.customerRepository.findByPhone(phone, customerId);
+
+    if (duplicate) {
+      throw new ConflictException('Phone number already registered');
+    }
+
+    const otp = await this.validateOtpRequest(
+      dto.otpRequestId,
+      phone,
+      dto.otpCode,
+    );
+
+    if (otp.purpose !== OtpPurpose.phone_change) {
+      throw new BadRequestException('OTP purpose mismatch for phone change');
+    }
+
+    await this.otpRepository.markVerified(otp.id);
+
+    await this.customerRepository.update(customerId, { phone });
 
     return this.getCustomerProfile(customerId);
   }
@@ -278,6 +418,7 @@ export class OtpService {
         fullName: customer.fullName,
         email: customer.email,
         photoUrl: customer.photoUrl,
+        customerCode: customer.customerCode,
       },
     );
 
@@ -333,6 +474,7 @@ export class OtpService {
       fullName: string;
       email: string | null;
       photoUrl: string | null;
+      customerCode: string;
     },
   ): Promise<CustomerAuthResponseDto> {
     const accessExpiresIn = this.configService.get<string>('jwt.expiresIn', '7d');
@@ -374,6 +516,7 @@ export class OtpService {
         fullName: profile.fullName,
         email: profile.email,
         photoUrl: profile.photoUrl,
+        customerCode: profile.customerCode,
       },
     };
   }

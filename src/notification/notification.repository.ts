@@ -436,13 +436,22 @@ export class NotificationRepository {
       return 0;
     }
 
+    const metas = await this.loadMetas(notificationIds);
+    let updated = 0;
+
     await this.prisma.$transaction(async (tx) => {
       for (const notificationId of notificationIds) {
+        const meta = metas.get(notificationId);
+        if (!meta || meta.recipientCustomerId !== customerId || meta.readAt) {
+          continue;
+        }
+
         await this.updateMetaReadStatus(tx, notificationId, true);
+        updated += 1;
       }
     });
 
-    return notificationIds.length;
+    return updated;
   }
 
   private async updateMetaReadStatus(

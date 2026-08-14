@@ -6,7 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_shadows.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
-import 'package:yelo_laundry_erp/features/binatu/data/dummy_binatu_notifications.dart';
+import 'package:yelo_laundry_erp/features/binatu/utils/binatu_notification_formatters.dart';
 import 'package:yelo_laundry_erp/features/binatu/providers/binatu_order_provider.dart';
 import 'package:yelo_laundry_erp/features/notifications/models/operator_assistance_notification.dart';
 

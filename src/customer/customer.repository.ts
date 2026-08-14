@@ -215,6 +215,7 @@ export class CustomerRepository {
         email: true,
         photoUrl: true,
         isActive: true,
+        customerCode: true,
       },
     });
   }
@@ -258,6 +259,8 @@ export class CustomerRepository {
     phone: string;
     email: string | null;
     gender?: Prisma.CustomerCreateInput['gender'];
+    age?: number | null;
+    occupation?: string | null;
     birthDate?: Date;
     isActive: boolean;
     photoUrl?: string;
@@ -270,6 +273,8 @@ export class CustomerRepository {
           phone: data.phone,
           email: data.email,
           gender: data.gender,
+          age: data.age,
+          occupation: data.occupation,
           birthDate: data.birthDate,
           isActive: data.isActive,
           photoUrl: data.photoUrl,

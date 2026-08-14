@@ -97,7 +97,7 @@ class _EmployeeMasterScreenState extends ConsumerState<EmployeeMasterScreen> {
                     height: 120,
                     child: Center(child: CircularProgressIndicator()),
                   ),
-                  error: (_, __) => EmployeeSummaryGrid(
+                  error: (_, _) => EmployeeSummaryGrid(
                     summary: computeEmployeeSummary(employees),
                   ),
                   data: (summary) => EmployeeSummaryGrid(summary: summary),

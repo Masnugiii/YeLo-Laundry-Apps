@@ -15,7 +15,7 @@ import { RefreshResponseDto } from './dto/refresh-response.dto';
 import { JwtPayload, EmployeeJwtPayload } from './interfaces/jwt-payload.interface';
 import { OtpService } from './otp/otp.service';
 import { normalizePhone } from './utils/phone.util';
-import { extractRoles } from './utils/role.util';
+import { extractPermissions, extractRoles } from './utils/role.util';
 import {
   extractSessionId,
   generateRefreshToken,
@@ -67,6 +67,7 @@ export class AuthService {
     }
 
     const roles = extractRoles(employee.employeeRoles);
+    const permissions = extractPermissions(employee.employeeRoles);
 
     const payload: EmployeeJwtPayload = {
       actorType: 'employee',
@@ -90,6 +91,7 @@ export class AuthService {
           fullName: employee.fullName,
           phone: employee.phone,
           roles,
+          permissions,
         },
       },
     };
@@ -105,6 +107,7 @@ export class AuthService {
     }
 
     const roles = extractRoles(employee.employeeRoles);
+    const permissions = extractPermissions(employee.employeeRoles);
 
     this.logger.log(`Profile loaded for employee ${employeeId}`);
 
@@ -117,6 +120,7 @@ export class AuthService {
         fullName: employee.fullName,
         phone: employee.phone,
         roles,
+        permissions,
       },
     };
   }

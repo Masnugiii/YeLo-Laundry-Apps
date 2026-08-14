@@ -5,7 +5,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
 import 'package:yelo_laundry_erp/features/receipt/presentation/receipt_theme.dart';
-import 'package:yelo_laundry_erp/features/wallet/data/dummy_wallet_top_up_receipt.dart';
 import 'package:yelo_laundry_erp/features/wallet/models/wallet_top_up_confirmation.dart';
 import 'package:yelo_laundry_erp/features/wallet/models/wallet_top_up_receipt.dart';
 import 'package:yelo_laundry_erp/features/wallet/presentation/widgets/wallet_top_up_thermal_receipt_layout.dart';
@@ -28,12 +27,12 @@ class WalletTopUpReceiptScreen extends StatefulWidget {
 class _WalletTopUpReceiptScreenState extends State<WalletTopUpReceiptScreen> {
   WalletTopUpReceiptPaperWidth _paperWidth = WalletTopUpReceiptPaperWidth.mm58;
 
-  WalletTopUpReceipt get _receipt {
+  WalletTopUpReceipt? get _receipt {
     if (widget.receipt != null) return widget.receipt!;
     if (widget.confirmation != null) {
-      return walletTopUpReceiptFromConfirmation(widget.confirmation!);
+      return WalletTopUpReceipt.fromConfirmation(widget.confirmation!);
     }
-    return dummyWalletTopUpReceipt;
+    return null;
   }
 
   String? get _customerId => widget.confirmation?.customerId;
@@ -60,6 +59,21 @@ class _WalletTopUpReceiptScreenState extends State<WalletTopUpReceiptScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final receipt = _receipt;
+    if (receipt == null) {
+      return Scaffold(
+        backgroundColor: AppColors.dashboardBackground,
+        appBar: AppBar(
+          backgroundColor: AppColors.primary,
+          foregroundColor: AppColors.onPrimary,
+          title: const Text('Struk Top Up Wallet'),
+        ),
+        body: const Center(
+          child: Text('Data struk tidak tersedia.'),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.dashboardBackground,
       appBar: AppBar(
@@ -124,7 +138,7 @@ class _WalletTopUpReceiptScreenState extends State<WalletTopUpReceiptScreen> {
                     ],
                   ),
                   child: WalletTopUpThermalReceiptLayout(
-                    receipt: _receipt,
+                    receipt: receipt,
                     paperWidth: _paperWidth,
                   ),
                 ),

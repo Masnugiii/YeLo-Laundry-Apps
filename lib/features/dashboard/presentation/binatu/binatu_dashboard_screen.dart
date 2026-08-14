@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
 import 'package:yelo_laundry_erp/core/role/role.dart';
-import 'package:yelo_laundry_erp/features/dashboard/data/dummy_dashboard_employee.dart';
 import 'package:yelo_laundry_erp/features/dashboard/presentation/owner/widgets/pos_header.dart';
 import 'package:yelo_laundry_erp/features/attendance/presentation/binatu_attendance_screen.dart';
 import 'package:yelo_laundry_erp/features/binatu/models/binatu_ironing_status.dart';
@@ -32,14 +32,17 @@ class BinatuDashboardScreen extends ConsumerWidget {
         const BinatuIroningQueueScreen(
           key: ValueKey('binatu-dashboard-queue'),
           showBackButton: false,
+          showBackToDashboard: true,
         ),
         const BinatuAttendanceScreen(
           key: ValueKey('binatu-dashboard-attendance'),
           showBackButton: false,
+          showBackToDashboard: true,
         ),
         const BinatuSettingsScreen(
           key: ValueKey('binatu-dashboard-settings'),
           showBackButton: false,
+          showBackToDashboard: true,
         ),
       ],
     );
@@ -68,7 +71,7 @@ class _BinatuHomePage extends ConsumerWidget {
       children: [
         const SafeArea(
           bottom: false,
-          child: PosHeader(employeeOverride: dummyBinatuDashboardEmployee),
+          child: PosHeader(),
         ),
         Expanded(
           child: SingleChildScrollView(
@@ -119,7 +122,9 @@ class _BinatuHomePage extends ConsumerWidget {
                         ),
                         StatCard(
                           title: "Today's Target (Kg)",
-                          value: summary.todaysTargetKg.toStringAsFixed(0),
+                          value: summary.todaysTargetKg > 0
+                              ? summary.todaysTargetKg.toStringAsFixed(0)
+                              : '—',
                           icon: Icons.flag_outlined,
                           iconColor: AppColors.primary,
                         ),
@@ -176,6 +181,11 @@ class _BinatuHomePage extends ConsumerWidget {
                     BinatuQueueFilter.readyForPickup,
                     1,
                   ),
+                ),
+                PosMenuCard(
+                  title: 'Laci Laundry',
+                  icon: Icons.inventory_2_outlined,
+                  onTap: () => context.push('/laci-laundry'),
                 ),
               ],
             ),

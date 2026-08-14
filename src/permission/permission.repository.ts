@@ -32,6 +32,15 @@ export class PermissionRepository {
     });
   }
 
+  findAllRoles() {
+    return this.prisma.role.findMany({
+      where: {
+        deletedAt: null,
+      },
+      orderBy: [{ name: 'asc' }],
+    });
+  }
+
   findPermissionsByRoleId(roleId: string) {
     return this.prisma.rolePermission.findMany({
       where: {

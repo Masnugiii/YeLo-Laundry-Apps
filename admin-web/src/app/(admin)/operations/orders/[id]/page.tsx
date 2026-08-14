@@ -25,6 +25,7 @@ import {
   useOrderPayments,
   useRefundPayment,
 } from "@/hooks/use-orders";
+import { useOrderReceiptDeliveries } from "@/hooks/use-order-receipts";
 import { getErrorMessage } from "@/lib/errors";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
@@ -54,6 +55,7 @@ export default function OrderDetailPage() {
   const orderQuery = useOrder(orderId);
   const customerQuery = useOrderCustomer(orderQuery.data?.customerId ?? "");
   const paymentsQuery = useOrderPayments(orderId);
+  const receiptsQuery = useOrderReceiptDeliveries(orderId);
   const cancelOrder = useCancelOrder(orderId);
   const refundPayment = useRefundPayment(orderId);
 
@@ -67,6 +69,7 @@ export default function OrderDetailPage() {
   const order = orderQuery.data;
   const customer = customerQuery.data;
   const payments = paymentsQuery.data?.items ?? [];
+  const receipts = receiptsQuery.data ?? [];
 
   if (orderQuery.isLoading) return <OrderDetailSkeleton />;
 
@@ -283,6 +286,53 @@ export default function OrderDetailPage() {
           ))}
           {!payments.length ? (
             <p className="text-sm text-slate-500">No payment records yet.</p>
+          ) : null}
+        </div>
+      </Card>
+
+      <Card>
+        <CardTitle>WhatsApp Receipt</CardTitle>
+        <div className="mt-4 space-y-3">
+          {receiptsQuery.isLoading ? (
+            <p className="text-sm text-slate-500">Loading receipt deliveries...</p>
+          ) : null}
+          {receiptsQuery.isError ? (
+            <p className="text-sm text-red-600">
+              Failed to load WhatsApp receipt status.
+            </p>
+          ) : null}
+          {receipts.map((receipt) => (
+            <div
+              key={receipt.id}
+              className="rounded-lg border border-slate-200 p-4 text-sm dark:border-slate-800"
+            >
+              <p>
+                <span className="font-medium">Receipt:</span> Generated
+              </p>
+              <p>
+                <span className="font-medium">WhatsApp:</span>{" "}
+                {receipt.deliveryStatus === "SENT"
+                  ? "Sent"
+                  : receipt.deliveryStatus === "FAILED"
+                    ? "Failed"
+                    : receipt.deliveryStatus === "NOT_CONFIGURED"
+                      ? "Not configured"
+                      : "Pending"}
+              </p>
+              <p>Payment Snapshot: {receipt.paymentStatusSnapshot}</p>
+              <p>Method Snapshot: {receipt.paymentMethodSnapshot ?? "-"}</p>
+              <p>Phone: {receipt.customerPhone ?? "-"}</p>
+              <p>Created: {formatDate(receipt.createdAt)}</p>
+              {receipt.sentAt ? <p>Sent At: {formatDate(receipt.sentAt)}</p> : null}
+              {receipt.failureReason ? (
+                <p className="text-red-600">Reason: {receipt.failureReason}</p>
+              ) : null}
+            </div>
+          ))}
+          {!receiptsQuery.isLoading && !receipts.length ? (
+            <p className="text-sm text-slate-500">
+              No WhatsApp receipt delivery attempts yet.
+            </p>
           ) : null}
         </div>
       </Card>

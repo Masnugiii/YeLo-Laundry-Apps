@@ -89,8 +89,10 @@ export class CatalogService {
         serviceName: dto.serviceName,
         description: dto.description,
         unitType: dto.unitType,
-        weight: dto.weight ?? true,
-        piece: dto.piece ?? false,
+        weight: dto.weight ?? dto.unitType === 'kg',
+        piece:
+          dto.piece ??
+          (dto.unitType === 'piece' || dto.unitType === 'item'),
         durationDay: dto.durationDay,
         isActive: dto.isActive ?? true,
       },
@@ -202,13 +204,18 @@ export class CatalogService {
   }
 
   async createPrice(dto: CreateServicePriceDto, employeeId: string) {
+    // Allow pricing inactive services so Admin can set price before re-activating.
     const service = await this.prisma.service.findFirst({
-      where: { id: dto.serviceId, deletedAt: null, isActive: true },
+      where: { id: dto.serviceId, deletedAt: null },
       select: { id: true },
     });
 
     if (!service) {
-      throw new NotFoundException('Active service not found');
+      throw new NotFoundException('Service not found');
+    }
+
+    if (dto.price < 0) {
+      throw new BadRequestException('Service price cannot be negative');
     }
 
     const effectiveDate = dto.effectiveDate
@@ -227,6 +234,32 @@ export class CatalogService {
             deletedAt: null,
           },
           data: { isActive: false },
+        });
+      }
+
+      // Upsert same-day price to avoid unique (serviceId, effectiveDate) conflicts.
+      const existingSameDay = await tx.servicePrice.findFirst({
+        where: {
+          serviceId: dto.serviceId,
+          effectiveDate,
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+
+      if (existingSameDay) {
+        return tx.servicePrice.update({
+          where: { id: existingSameDay.id },
+          data: {
+            price: dto.price,
+            isActive: shouldActivate,
+            expiredDate: null,
+          },
+          include: {
+            service: {
+              select: { id: true, serviceCode: true, serviceName: true },
+            },
+          },
         });
       }
 

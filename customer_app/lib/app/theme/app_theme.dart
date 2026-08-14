@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 abstract final class AppColors {
-  static const primary = Color(0xFF1B4D89);
-  static const accent = Color(0xFF00A8A8);
+  static const brandBlue = Color(0xFF033B8E);
+  static const brandYellow = Color(0xFFF8D613);
+  static const primary = brandBlue;
+  static const accent = brandYellow;
+  static const onAccent = brandBlue;
   static const background = Color(0xFFF5F7FA);
   static const surface = Colors.white;
   static const textPrimary = Color(0xFF1A1A2E);
@@ -22,6 +25,7 @@ abstract final class AppTheme {
         seedColor: AppColors.primary,
         primary: AppColors.primary,
         secondary: AppColors.accent,
+        tertiary: AppColors.accent,
       ),
       scaffoldBackgroundColor: AppColors.background,
       textTheme: textTheme.apply(

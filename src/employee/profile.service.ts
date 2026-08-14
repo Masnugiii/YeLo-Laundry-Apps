@@ -64,7 +64,7 @@ export class ProfileService {
     );
 
     await this.employeeRepository.update(employeeId, {
-      ...(dto.fullName !== undefined && { fullName: dto.fullName }),
+      ...(dto.fullName !== undefined && { fullName: dto.fullName.trim() }),
       ...(phone !== undefined && { phone }),
       ...(dto.email !== undefined && { email }),
       ...(dto.avatar !== undefined && { photoUrl: dto.avatar }),

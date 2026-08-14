@@ -4,13 +4,9 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
-import 'package:yelo_laundry_erp/features/reports/data/dummy_report_data.dart';
 import 'package:yelo_laundry_erp/features/reports/models/report_models.dart';
 import 'package:yelo_laundry_erp/features/reports/presentation/report_theme.dart';
-import 'package:yelo_laundry_erp/features/reports/presentation/widgets/ai_planner_card.dart';
 import 'package:yelo_laundry_erp/features/reports/presentation/widgets/binatu_performance_card.dart';
-import 'package:yelo_laundry_erp/features/reports/presentation/widgets/busy_day_calendar.dart';
-import 'package:yelo_laundry_erp/features/reports/presentation/widgets/customer_review_card.dart';
 import 'package:yelo_laundry_erp/features/reports/presentation/widgets/employee_performance_card.dart';
 import 'package:yelo_laundry_erp/features/reports/presentation/widgets/financial_kpi_grid.dart';
 import 'package:yelo_laundry_erp/features/reports/presentation/widgets/payment_analytics_chart.dart';
@@ -111,34 +107,46 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                     const SizedBox(height: AppSpacing.s16),
                     ReportTheme.sectionCard(
                       title: 'Binatu Performance',
-                      child: const BinatuPerformanceCard(
-                        performance: dummyBinatuPerformance,
+                      child: BinatuPerformanceCard(
+                        performance: report.binatuPerformance,
                       ),
                     ),
                     const SizedBox(height: AppSpacing.s16),
                     ReportTheme.sectionCard(
                       title: 'Employee Performance',
                       subtitle: 'Performa tim binatu bulan ini',
-                      child: const EmployeePerformanceCard(
-                        employees: dummyEmployeePerformance,
-                      ),
+                      child: report.employeePerformance.isEmpty
+                          ? const _EmptyReportHint(
+                              message:
+                                  'Belum ada data performa karyawan untuk periode ini.',
+                            )
+                          : EmployeePerformanceCard(
+                              employees: report.employeePerformance,
+                            ),
                     ),
                     const SizedBox(height: AppSpacing.s16),
                     ReportTheme.sectionCard(
                       title: 'Customer Review',
                       subtitle: 'Ulasan pelanggan terbaru',
-                      child: const CustomerReviewCard(
-                        reviews: dummyCustomerReviews,
+                      child: const _EmptyReportHint(
+                        message:
+                            'Data ulasan pelanggan belum tersedia dari backend.',
                       ),
                     ),
                     const SizedBox(height: AppSpacing.s16),
                     ReportTheme.sectionCard(
                       title: 'Busy Day Calendar',
                       subtitle: 'Identifikasi hari ramai dan sepi',
-                      child: BusyDayCalendar(entries: dummyBusyDaysAugust2026),
+                      child: const _EmptyReportHint(
+                        message:
+                            'Kalender hari ramai belum tersedia dari backend.',
+                      ),
                     ),
                     const SizedBox(height: AppSpacing.s16),
-                    const AiPlannerCard(recommendations: dummyAiRecommendations),
+                    const _EmptyReportHint(
+                      message:
+                          'AI Planner belum tersedia dari backend.',
+                    ),
                     const SizedBox(height: AppSpacing.s16),
                     ReportTheme.sectionCard(
                       title: 'Top Services',

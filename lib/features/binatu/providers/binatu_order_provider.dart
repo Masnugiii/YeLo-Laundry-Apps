@@ -1,8 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:yelo_laundry_erp/core/providers/core_providers.dart';
+import 'package:yelo_laundry_erp/core/session/session_provider.dart';
 import 'package:yelo_laundry_erp/features/binatu/data/binatu_laundry_mapper.dart';
-import 'package:yelo_laundry_erp/features/binatu/data/dummy_binatu_orders.dart';
 import 'package:yelo_laundry_erp/features/binatu/models/binatu_ironing_order.dart';
 import 'package:yelo_laundry_erp/features/binatu/models/binatu_ironing_status.dart';
 import 'package:yelo_laundry_erp/features/binatu/models/binatu_notification.dart';
@@ -24,6 +24,11 @@ class BinatuOrderNotifier extends AsyncNotifier<List<BinatuIroningOrder>> {
   }
 
   List<BinatuIroningOrder> get _orders => state.value ?? [];
+
+  String get _staffName {
+    final name = ref.read(sessionProvider).name.trim();
+    return name.isNotEmpty ? name : 'Staff';
+  }
 
   Future<List<BinatuIroningOrder>> _loadFromApi() async {
     final items =
@@ -114,7 +119,7 @@ class BinatuOrderNotifier extends AsyncNotifier<List<BinatuIroningOrder>> {
       currentlyIroning: ironing,
       ironingCompleted: ironingCompleted,
       operatorAssistanceCompleted: operatorAssistanceCompleted,
-      todaysTargetKg: dummyBinatuTodaysTargetKg,
+      todaysTargetKg: 0,
       todaysCompletedKg: completedKg,
     );
   }
@@ -205,18 +210,19 @@ class BinatuOrderNotifier extends AsyncNotifier<List<BinatuIroningOrder>> {
 
   void acceptJobAsBinatu(
     String orderId, {
-    String staffName = dummyBinatuStaffName,
+    String? staffName,
   }) {
     processWaitingTimers();
     final order = orderById(orderId);
     if (order == null || !order.canBinatuAccept) return;
 
     final acceptedAt = DateTime.now();
+    final resolvedStaffName = staffName ?? _staffName;
     _updateOrder(
       orderId,
       order.copyWith(
         ironingStatus: BinatuIroningStatus.acceptedByBinatu,
-        assignedBinatu: staffName,
+        assignedBinatu: resolvedStaffName,
         acceptedAt: acceptedAt,
         isOperatorAssistance: false,
       ),
@@ -224,7 +230,7 @@ class BinatuOrderNotifier extends AsyncNotifier<List<BinatuIroningOrder>> {
 
     ref.read(appNotificationProvider.notifier).resolveOperatorAssistance(
           orderId,
-          acceptedBy: staffName,
+          acceptedBy: resolvedStaffName,
         );
 
     ref.read(binatuNotificationProvider.notifier).prepend(
@@ -233,7 +239,7 @@ class BinatuOrderNotifier extends AsyncNotifier<List<BinatuIroningOrder>> {
             type: BinatuNotificationType.ironingJobAccepted,
             orderNumber: order.orderNumber,
             customerName: order.customerName,
-            assignedBinatu: staffName,
+            assignedBinatu: resolvedStaffName,
             createdAt: acceptedAt,
             message: 'Pekerjaan setrika telah diterima.',
           ),
@@ -242,7 +248,7 @@ class BinatuOrderNotifier extends AsyncNotifier<List<BinatuIroningOrder>> {
 
   void acceptJobAsOperator(
     String orderId, {
-    String staffName = dummyOperatorStaffName,
+    String? staffName,
   }) {
     processWaitingTimers();
     final settings = ref.read(ironingQueuePriorityProvider);
@@ -253,11 +259,12 @@ class BinatuOrderNotifier extends AsyncNotifier<List<BinatuIroningOrder>> {
     }
 
     final acceptedAt = DateTime.now();
+    final resolvedStaffName = staffName ?? _staffName;
     _updateOrder(
       orderId,
       order.copyWith(
         ironingStatus: BinatuIroningStatus.acceptedByBinatu,
-        assignedBinatu: staffName,
+        assignedBinatu: resolvedStaffName,
         acceptedAt: acceptedAt,
         isOperatorAssistance: true,
       ),
@@ -265,7 +272,7 @@ class BinatuOrderNotifier extends AsyncNotifier<List<BinatuIroningOrder>> {
 
     ref.read(appNotificationProvider.notifier).resolveOperatorAssistance(
           orderId,
-          acceptedBy: staffName,
+          acceptedBy: resolvedStaffName,
         );
 
     ref.read(binatuNotificationProvider.notifier).prepend(
@@ -274,14 +281,14 @@ class BinatuOrderNotifier extends AsyncNotifier<List<BinatuIroningOrder>> {
             type: BinatuNotificationType.ironingJobAccepted,
             orderNumber: order.orderNumber,
             customerName: order.customerName,
-            assignedBinatu: staffName,
+            assignedBinatu: resolvedStaffName,
             createdAt: acceptedAt,
             message: 'Bantuan operator telah menerima pekerjaan setrika.',
           ),
         );
   }
 
-  void acceptJob(String orderId, {String staffName = dummyBinatuStaffName}) {
+  void acceptJob(String orderId, {String? staffName}) {
     acceptJobAsBinatu(orderId, staffName: staffName);
   }
 

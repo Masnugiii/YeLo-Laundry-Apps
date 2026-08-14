@@ -106,4 +106,12 @@ export class CreateOrderDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional({
+    example: 'bb0e8400-e29b-41d4-a716-446655440010',
+    description: 'Optional CKS reward entitlement (reward redemption item id)',
+  })
+  @IsOptional()
+  @IsUUID()
+  rewardRedemptionItemId?: string;
 }

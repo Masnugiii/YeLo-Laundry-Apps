@@ -69,6 +69,25 @@ class WalletTransactionTile extends StatelessWidget {
                 label: 'Saldo Setelah Transaksi',
                 value: formatRupiah(transaction.balanceAfter),
               ),
+              if (transaction.referenceNumber != null &&
+                  transaction.referenceNumber!.trim().isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.s12),
+                const Divider(height: 1, color: AppColors.divider),
+                const SizedBox(height: AppSpacing.s12),
+                _Field(
+                  label: 'Reference',
+                  value: transaction.referenceNumber!,
+                ),
+              ],
+              if (transaction.status != null) ...[
+                const SizedBox(height: AppSpacing.s12),
+                const Divider(height: 1, color: AppColors.divider),
+                const SizedBox(height: AppSpacing.s12),
+                _Field(
+                  label: 'Status',
+                  value: transaction.status!,
+                ),
+              ],
               if (transaction.note != null) ...[
                 const SizedBox(height: AppSpacing.s12),
                 const Divider(height: 1, color: AppColors.divider),

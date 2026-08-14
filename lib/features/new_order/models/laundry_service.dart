@@ -9,6 +9,7 @@ class LaundryService {
     required this.name,
     required this.unitPrice,
     required this.unit,
+    this.code,
     this.description,
   });
 
@@ -16,7 +17,15 @@ class LaundryService {
   final String name;
   final int unitPrice;
   final ServiceUnit unit;
+  final String? code;
   final String? description;
+
+  bool get isCks {
+    final normalized = (code ?? '').toUpperCase();
+    if (normalized == 'CKS') return true;
+    return name.toLowerCase().contains('cuci kering setrika') ||
+        name.toUpperCase().contains('CKS');
+  }
 
   String get unitLabel => switch (unit) {
         ServiceUnit.perKg => '/ Kg',

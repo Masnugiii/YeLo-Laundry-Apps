@@ -1,6 +1,26 @@
 import 'package:yelo_laundry_erp/core/network/api_client.dart';
 import 'package:yelo_laundry_erp/core/network/api_response.dart';
+import 'package:yelo_laundry_erp/features/customer/data/customer_mapper.dart';
 import 'package:yelo_laundry_erp/features/customer/models/customer.dart';
+import 'package:yelo_laundry_erp/features/customer/models/customer_statistics.dart';
+
+class CustomerBusinessSummary {
+  const CustomerBusinessSummary({
+    required this.totalOrders,
+    required this.completedOrders,
+    required this.cancelledOrders,
+    required this.totalSpending,
+    required this.averageOrderValue,
+    this.lastOrderAt,
+  });
+
+  final int totalOrders;
+  final int completedOrders;
+  final int cancelledOrders;
+  final int totalSpending;
+  final int averageOrderValue;
+  final DateTime? lastOrderAt;
+}
 
 class CustomerRepository {
   CustomerRepository(this._apiClient);
@@ -40,6 +60,24 @@ class CustomerRepository {
     return _mapCustomer(data);
   }
 
+  Future<CustomerBusinessSummary> fetchCustomerSummary(String id) async {
+    final data = await _apiClient.get<Map<String, dynamic>>(
+      '/customers/$id/summary',
+      parser: (json) => json as Map<String, dynamic>,
+    );
+
+    return CustomerBusinessSummary(
+      totalOrders: (data['totalOrders'] as num?)?.toInt() ?? 0,
+      completedOrders: (data['completedOrders'] as num?)?.toInt() ?? 0,
+      cancelledOrders: (data['cancelledOrders'] as num?)?.toInt() ?? 0,
+      totalSpending: (data['totalSpending'] as num?)?.toInt() ?? 0,
+      averageOrderValue: (data['averageOrderValue'] as num?)?.toInt() ?? 0,
+      lastOrderAt: data['lastOrderAt'] == null
+          ? null
+          : DateTime.tryParse(data['lastOrderAt'] as String),
+    );
+  }
+
   Future<Customer> createCustomer({
     required String fullName,
     required String phone,
@@ -52,9 +90,9 @@ class CustomerRepository {
       data: {
         'fullName': fullName,
         'phone': phone,
-        if (email != null) 'email': email,
-        if (occupation != null) 'occupation': occupation,
-        if (addressDetail != null) 'addressDetail': addressDetail,
+        'email': ?email,
+        'occupation': ?occupation,
+        'addressDetail': ?addressDetail,
       },
       parser: (json) => json as Map<String, dynamic>,
     );
@@ -71,10 +109,10 @@ class CustomerRepository {
     final data = await _apiClient.patch<Map<String, dynamic>>(
       '/customers/$id',
       data: {
-        if (fullName != null) 'fullName': fullName,
-        if (phone != null) 'phone': phone,
-        if (occupation != null) 'occupation': occupation,
-        if (addressDetail != null) 'addressDetail': addressDetail,
+        'fullName': ?fullName,
+        'phone': ?phone,
+        'occupation': ?occupation,
+        'addressDetail': ?addressDetail,
       },
       parser: (json) => json as Map<String, dynamic>,
     );
@@ -93,17 +131,34 @@ class CustomerRepository {
         .toList();
   }
 
-  Customer _mapCustomer(Map<String, dynamic> json) {
-    return Customer(
-      id: json['id'] as String,
-      name: json['fullName'] as String? ?? '',
-      phone: json['phone'] as String? ?? '',
-      occupation: json['occupation'] as String?,
-      address: json['defaultAddress'] as String? ??
-          json['addressDetail'] as String?,
-      walletBalance: (json['walletBalance'] as num?)?.toInt() ?? 0,
-      points: (json['loyaltyPoints'] as num?)?.toInt() ?? 0,
-      isMember: json['isMember'] as bool? ?? false,
+  CustomerStatistics mapSummaryToStatistics(CustomerBusinessSummary summary) {
+    return CustomerStatistics(
+      totalOrders: summary.totalOrders,
+      lastOrder: summary.lastOrderAt == null
+          ? '-'
+          : _formatDate(summary.lastOrderAt!),
+      totalSpending: summary.totalSpending,
+      averageOrderValue: summary.averageOrderValue,
     );
   }
+
+  String _formatDate(DateTime date) {
+    const months = [
+      'Januari',
+      'Februari',
+      'Maret',
+      'April',
+      'Mei',
+      'Juni',
+      'Juli',
+      'Agustus',
+      'September',
+      'Oktober',
+      'November',
+      'Desember',
+    ];
+    return '${date.day} ${months[date.month - 1]} ${date.year}';
+  }
+
+  Customer _mapCustomer(Map<String, dynamic> json) => mapCustomerFromJson(json);
 }

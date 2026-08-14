@@ -1,10 +1,12 @@
 import { Injectable } from '@nestjs/common';
-import { WalletTransactionType } from '@prisma/client';
+import { PaymentStatus, WalletTransactionType } from '@prisma/client';
 import { PrismaService } from '../database/prisma/prisma.service';
 import { CustomerWalletRepository } from '../customer/customer-wallet.repository';
 import { CASHBACK_DESCRIPTION_PREFIX } from '../customer/customer-wallet.mapper';
 import { LoyaltySettingsService } from './loyalty-settings.service';
 import { RewardService } from './reward.service';
+
+const WALLET_PAYMENT_METHOD_CODE = 'YELO_WALLET';
 
 @Injectable()
 export class LoyaltyProcessorService {
@@ -22,6 +24,7 @@ export class LoyaltyProcessorService {
         id: true,
         customerId: true,
         orderStatus: true,
+        paymentStatus: true,
         items: {
           where: { deletedAt: null },
           select: { subtotal: true },
@@ -33,30 +36,50 @@ export class LoyaltyProcessorService {
       return null;
     }
 
-    const paidTotal = await this.prisma.payment.aggregate({
+    // No installment / partial loyalty earning: require fully paid order.
+    if (order.paymentStatus !== 'PAID') {
+      return null;
+    }
+
+    const payments = await this.prisma.payment.findMany({
       where: {
         orderId,
         deletedAt: null,
-        paymentStatus: 'PAID',
+        paymentStatus: PaymentStatus.PAID,
       },
-      _sum: { amount: true },
+      select: {
+        amount: true,
+        paymentMethod: { select: { code: true } },
+      },
     });
-    const orderTotal = order.items.reduce(
-      (sum, item) => sum + Number(item.subtotal),
+
+    const paidTotal = payments.reduce(
+      (sum, payment) => sum + Number(payment.amount),
       0,
     );
-    const amount = Number(paidTotal._sum.amount ?? orderTotal);
+    const walletPaidTotal = payments
+      .filter((payment) => payment.paymentMethod.code === WALLET_PAYMENT_METHOD_CODE)
+      .reduce((sum, payment) => sum + Number(payment.amount), 0);
+
+    // Wallet/deposit funds already earn at top-up — exclude from laundry points.
+    const eligibleLaundryAmount = Math.max(paidTotal - walletPaidTotal, 0);
 
     await this.rewardService.earnFromPayment(
       order.customerId,
       order.id,
-      amount,
+      eligibleLaundryAmount,
       employeeId,
     );
 
-    await this.applyCashback(order.customerId, order.id, amount, employeeId);
+    await this.applyCashback(order.customerId, order.id, paidTotal, employeeId);
 
-    return { orderId: order.id, customerId: order.customerId, amount };
+    return {
+      orderId: order.id,
+      customerId: order.customerId,
+      amount: paidTotal,
+      eligibleLaundryAmount,
+      walletPaidTotal,
+    };
   }
 
   private async applyCashback(

@@ -44,6 +44,7 @@ enum OtpPurpose {
   login
   register
   password_reset
+  phone_change
 
   @@map("otp_purpose")
 }
@@ -87,6 +88,9 @@ model Employee {
   otpCodes                OtpCode[]
   walletTransactions      WalletTransaction[]
   rewardPoints            RewardPoint[]
+  loyaltyProgramsCreated  LoyaltyProgram[]         @relation("LoyaltyProgramCreatedBy")
+  rewardRedemptionsFulfilled RewardRedemption[]    @relation("RewardRedemptionFulfilledBy")
+  rewardEntitlementUsages    RewardEntitlementUsage[] @relation("RewardEntitlementAppliedBy")
   customerNotes           CustomerNote[]
   createdOrders           Order[]                  @relation("OrderCreatedBy")
   updatedOrders           Order[]                  @relation("OrderUpdatedBy")
@@ -112,6 +116,9 @@ model Employee {
   payrollRecords          PayrollRecord[]
   payrollApprovalEvents   PayrollApprovalEvent[] @relation("PayrollApprovalActor")
   payrollPayments         PayrollPayment[]       @relation("PayrollPaymentActor")
+  storageAssignments      OrderStorageAssignment[] @relation("StorageAssignmentActor")
+  ordersStorageAssigned   Order[]                @relation("OrderStorageAssignedBy")
+  orderReceiptDeliveries  OrderReceiptDelivery[] @relation("OrderReceiptCreatedBy")
 
   @@index([status], map: "idx_employees_status")
   @@index([deletedAt], map: "idx_employees_deleted_at")
@@ -311,12 +318,15 @@ enum RewardPointType {
   earn
   redeem
   expired
+  clawback
+  program_reset
 
   @@map("reward_point_type")
 }
 
 enum RewardPointSource {
   laundry_payment
+  deposit
   promotion
   birthday
   referral
@@ -324,8 +334,35 @@ enum RewardPointSource {
   redeem
   voucher
   wallet_credit
+  mission
 
   @@map("reward_point_source")
+}
+
+enum RewardCatalogType {
+  LAUNDRY_KG
+  PHYSICAL_GOODS
+
+  @@map("reward_catalog_type")
+}
+
+enum RewardRedemptionStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+
+  @@map("reward_redemption_status")
+}
+
+/// Lifecycle of a laundry KG entitlement granted by a reward redemption line.
+enum RewardEntitlementStatus {
+  AVAILABLE
+  PARTIALLY_USED
+  USED
+  EXPIRED
+  CANCELLED
+
+  @@map("reward_entitlement_status")
 }
 
 enum LoyaltyVoucherDiscountType {
@@ -379,6 +416,8 @@ model Customer {
   phone            String    @unique @db.VarChar(20)
   email            String?   @db.VarChar(150)
   gender           Gender?
+  age              Int?      @db.SmallInt
+  occupation       String?   @db.VarChar(100)
   birthDate        DateTime? @map("birth_date") @db.Date
   defaultAddressId String?   @unique @map("default_address_id") @db.Uuid
   photoUrl         String?   @map("photo_url") @db.VarChar(500)
@@ -393,11 +432,14 @@ model Customer {
   wallet                  CustomerWallet?
   walletTransactions      WalletTransaction[]
   rewardPoints            RewardPoint[]
+  rewardRedemptions       RewardRedemption[]
   notes                   CustomerNote[]
   devices                 CustomerDevice[]
   orders                  Order[]
   customerServiceTickets  CustomerServiceTicket[]
   customerServiceMessages CustomerServiceMessage[]
+  missionClaims           CustomerMissionClaim[]
+  walletTopUpRequests     WalletTopUpRequest[]
 
   @@index([fullName], map: "idx_customers_full_name")
   @@index([isActive], map: "idx_customers_is_active")
@@ -509,10 +551,16 @@ model WalletTransaction {
 // ---------------------------------------------------------------------------
 
 /// Customer loyalty reward point ledger.
+///
+/// Earn lots use `remainingPoint` for FIFO redeem/expiry consumption.
+/// History rows are never hard-deleted; program cutover uses `program_reset`.
 model RewardPoint {
   id                  String             @id @default(uuid()) @db.Uuid
   customerId          String             @map("customer_id") @db.Uuid
+  programId           String?            @map("program_id") @db.Uuid
   point               Int
+  /// Remaining usable points for earn lots. Null for non-earn ledger rows.
+  remainingPoint      Int?               @map("remaining_point")
   type                RewardPointType
   source              RewardPointSource?
   description         String?            @db.Text
@@ -526,16 +574,176 @@ model RewardPoint {
   deletedAt           DateTime?          @map("deleted_at") @db.Timestamptz(6)
 
   // Relations
-  customer          Customer @relation(fields: [customerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  createdByEmployee Employee? @relation(fields: [createdByEmployeeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  customer          Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  program           LoyaltyProgram? @relation(fields: [programId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  createdByEmployee Employee?       @relation(fields: [createdByEmployeeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  allocationsAsEarn RewardPointAllocation[] @relation("RewardPointAllocationEarn")
+  allocationsAsConsume RewardPointAllocation[] @relation("RewardPointAllocationConsume")
+  redemptionLedger  RewardRedemption? @relation("RewardRedemptionLedger")
 
   @@index([customerId], map: "idx_reward_points_customer_id")
+  @@index([programId], map: "idx_reward_points_program_id")
   @@index([type], map: "idx_reward_points_type")
   @@index([source], map: "idx_reward_points_source")
   @@index([referenceId], map: "idx_reward_points_reference_id")
   @@index([expiredAt], map: "idx_reward_points_expired_at")
+  @@index([remainingPoint], map: "idx_reward_points_remaining_point")
   @@index([deletedAt], map: "idx_reward_points_deleted_at")
+  /// App-level uniqueness for earn/clawback references. Partial unique index
+  /// for active earn rows is created in SQL migration.
+  @@index([customerId, type, source, referenceType, referenceId], map: "idx_reward_points_reference_lookup")
   @@map("reward_points")
+}
+
+/// FIFO allocation linking earn lots to redeem / expire / clawback ledger rows.
+model RewardPointAllocation {
+  id             String   @id @default(uuid()) @db.Uuid
+  earnPointId    String   @map("earn_point_id") @db.Uuid
+  consumePointId String   @map("consume_point_id") @db.Uuid
+  points         Int
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  earnPoint    RewardPoint @relation("RewardPointAllocationEarn", fields: [earnPointId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  consumePoint RewardPoint @relation("RewardPointAllocationConsume", fields: [consumePointId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([earnPointId], map: "idx_reward_point_allocations_earn_point_id")
+  @@index([consumePointId], map: "idx_reward_point_allocations_consume_point_id")
+  @@map("reward_point_allocations")
+}
+
+/// Auditable loyalty program cutover boundary.
+/// Existing history is retained; only balances after startedAt count for the active program.
+model LoyaltyProgram {
+  id                   String    @id @default(uuid()) @db.Uuid
+  code                 String    @unique @db.VarChar(50)
+  name                 String    @db.VarChar(150)
+  startedAt            DateTime  @map("started_at") @db.Timestamptz(6)
+  endedAt              DateTime? @map("ended_at") @db.Timestamptz(6)
+  isActive             Boolean   @default(false) @map("is_active")
+  notes                String?   @db.Text
+  createdByEmployeeId  String?   @map("created_by_employee_id") @db.Uuid
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  createdByEmployee Employee?     @relation("LoyaltyProgramCreatedBy", fields: [createdByEmployeeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  rewardPoints      RewardPoint[]
+  redemptions       RewardRedemption[]
+
+  @@index([isActive], map: "idx_loyalty_programs_is_active")
+  @@index([startedAt], map: "idx_loyalty_programs_started_at")
+  @@map("loyalty_programs")
+}
+
+/// Redeemable YeLo Rewards catalog (laundry kg entitlement or physical goods).
+model RewardCatalogItem {
+  id                  String            @id @default(uuid()) @db.Uuid
+  code                String            @unique @db.VarChar(50)
+  name                String            @db.VarChar(150)
+  description         String?           @db.Text
+  type                RewardCatalogType
+  costPoints          Int               @map("cost_points")
+  isActive            Boolean           @default(true) @map("is_active")
+  /// Free laundry kg entitlement for LAUNDRY_KG rewards.
+  kg                  Int?
+  serviceType         String?           @map("service_type") @db.VarChar(50)
+  serviceDurationDays Int?              @map("service_duration_days")
+  stock               Int?
+  metadata            Json?
+  createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt           DateTime?         @map("deleted_at") @db.Timestamptz(6)
+
+  redemptionItems RewardRedemptionItem[]
+
+  @@index([type], map: "idx_reward_catalog_items_type")
+  @@index([isActive], map: "idx_reward_catalog_items_is_active")
+  @@index([deletedAt], map: "idx_reward_catalog_items_deleted_at")
+  @@map("reward_catalog_items")
+}
+
+/// Customer reward redemption header (supports multi-item / kelipatan).
+model RewardRedemption {
+  id                    String                 @id @default(uuid()) @db.Uuid
+  customerId            String                 @map("customer_id") @db.Uuid
+  programId             String?                @map("program_id") @db.Uuid
+  status                RewardRedemptionStatus @default(PENDING)
+  totalPointsSpent      Int                    @map("total_points_spent")
+  /// Optional client idempotency key (unique per customer when present).
+  idempotencyKey        String?                @map("idempotency_key") @db.VarChar(100)
+  notes                 String?                @db.Text
+  fulfilledByEmployeeId String?                @map("fulfilled_by_employee_id") @db.Uuid
+  fulfilledAt           DateTime?              @map("fulfilled_at") @db.Timestamptz(6)
+  ledgerPointId         String?                @unique @map("ledger_point_id") @db.Uuid
+  createdAt             DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt             DateTime?              @map("deleted_at") @db.Timestamptz(6)
+
+  customer            Customer              @relation(fields: [customerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  program             LoyaltyProgram?       @relation(fields: [programId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  fulfilledByEmployee Employee?             @relation("RewardRedemptionFulfilledBy", fields: [fulfilledByEmployeeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  ledgerPoint         RewardPoint?          @relation("RewardRedemptionLedger", fields: [ledgerPointId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  items               RewardRedemptionItem[]
+
+  /// Partial unique (customer_id, idempotency_key) WHERE key IS NOT NULL
+  /// is enforced in SQL migration.
+  @@index([customerId, idempotencyKey], map: "idx_reward_redemptions_customer_idempotency_key")
+  @@index([customerId], map: "idx_reward_redemptions_customer_id")
+  @@index([programId], map: "idx_reward_redemptions_program_id")
+  @@index([status], map: "idx_reward_redemptions_status")
+  @@index([createdAt], map: "idx_reward_redemptions_created_at")
+  @@index([deletedAt], map: "idx_reward_redemptions_deleted_at")
+  @@map("reward_redemptions")
+}
+
+model RewardRedemptionItem {
+  id             String   @id @default(uuid()) @db.Uuid
+  redemptionId   String   @map("redemption_id") @db.Uuid
+  catalogItemId  String   @map("catalog_item_id") @db.Uuid
+  quantity       Int      @default(1)
+  pointsSpent    Int      @map("points_spent")
+  /// Snapshot of laundry kg entitlement granted by this line.
+  entitlementKg  Int?     @map("entitlement_kg")
+  /// Remaining usable free KG for CKS laundry entitlements.
+  remainingKg    Decimal? @map("remaining_kg") @db.Decimal(10, 3)
+  entitlementStatus RewardEntitlementStatus? @map("entitlement_status")
+  /// Explicit expiration (issuance/redemption time + durationDays).
+  entitlementExpiresAt DateTime? @map("entitlement_expires_at") @db.Timestamptz(6)
+  metadata       Json?
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  redemption  RewardRedemption  @relation(fields: [redemptionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  catalogItem RewardCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  usages      RewardEntitlementUsage[]
+
+  @@index([redemptionId], map: "idx_reward_redemption_items_redemption_id")
+  @@index([catalogItemId], map: "idx_reward_redemption_items_catalog_item_id")
+  @@index([entitlementStatus], map: "idx_reward_redemption_items_entitlement_status")
+  @@index([entitlementExpiresAt], map: "idx_reward_redemption_items_entitlement_expires_at")
+  @@map("reward_redemption_items")
+}
+
+/// Audit trail when a CKS laundry entitlement is applied to an order.
+model RewardEntitlementUsage {
+  id                    String   @id @default(uuid()) @db.Uuid
+  redemptionItemId      String   @map("redemption_item_id") @db.Uuid
+  orderId               String   @map("order_id") @db.Uuid
+  kgConsumed            Decimal  @map("kg_consumed") @db.Decimal(10, 3)
+  freeKgApplied         Decimal  @map("free_kg_applied") @db.Decimal(10, 3)
+  billableKg            Decimal  @map("billable_kg") @db.Decimal(10, 3)
+  orderKg               Decimal  @map("order_kg") @db.Decimal(10, 3)
+  remainingKgAfter      Decimal  @map("remaining_kg_after") @db.Decimal(10, 3)
+  appliedByEmployeeId   String?  @map("applied_by_employee_id") @db.Uuid
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  redemptionItem    RewardRedemptionItem @relation(fields: [redemptionItemId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  order             Order                @relation(fields: [orderId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  appliedByEmployee Employee?            @relation("RewardEntitlementAppliedBy", fields: [appliedByEmployeeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@unique([redemptionItemId, orderId], map: "idx_reward_entitlement_usages_item_order_unique")
+  @@index([redemptionItemId], map: "idx_reward_entitlement_usages_redemption_item_id")
+  @@index([orderId], map: "idx_reward_entitlement_usages_order_id")
+  @@index([appliedByEmployeeId], map: "idx_reward_entitlement_usages_applied_by")
+  @@map("reward_entitlement_usages")
 }
 
 // ---------------------------------------------------------------------------
@@ -547,8 +755,10 @@ model LoyaltyVoucher {
   id                  String                   @id @default(uuid()) @db.Uuid
   code                String                   @unique @db.VarChar(50)
   name                String                   @db.VarChar(150)
+  description         String?                  @db.Text
   discountType        LoyaltyVoucherDiscountType @map("discount_type")
   discountValue       Decimal                  @map("discount_value") @db.Decimal(15, 2)
+  maxDiscount         Decimal?                 @map("max_discount") @db.Decimal(15, 2)
   cashbackType        CashbackType?            @map("cashback_type")
   cashbackValue       Decimal?                 @map("cashback_value") @db.Decimal(15, 2)
   cashbackMax         Decimal?                 @map("cashback_max") @db.Decimal(15, 2)
@@ -567,6 +777,100 @@ model LoyaltyVoucher {
   @@index([startDate, endDate], map: "idx_loyalty_vouchers_period")
   @@index([deletedAt], map: "idx_loyalty_vouchers_deleted_at")
   @@map("loyalty_vouchers")
+}
+
+// ---------------------------------------------------------------------------
+// LaundryPerfume
+// ---------------------------------------------------------------------------
+
+/// Master data for laundry perfume/scent options.
+model LaundryPerfume {
+  id           String    @id @default(uuid()) @db.Uuid
+  code         String    @unique @db.VarChar(50)
+  name         String    @db.VarChar(100)
+  extraPrice   Decimal   @default(0) @map("extra_price") @db.Decimal(15, 2)
+  displayOrder Int       @default(0) @map("display_order")
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@index([isActive], map: "idx_laundry_perfumes_is_active")
+  @@index([deletedAt], map: "idx_laundry_perfumes_deleted_at")
+  @@map("laundry_perfumes")
+}
+
+enum MissionType {
+  quiz
+  link_account
+  refer_friend
+
+  @@map("mission_type")
+}
+
+/// Loyalty mission definitions for customer engagement.
+model LoyaltyMission {
+  id           String      @id @default(uuid()) @db.Uuid
+  code         String      @unique @db.VarChar(50)
+  type         MissionType
+  title        String      @db.VarChar(150)
+  description  String?     @db.Text
+  rewardPoints Int         @map("reward_points")
+  isActive     Boolean     @default(true) @map("is_active")
+  sortOrder    Int         @default(0) @map("sort_order")
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt    DateTime?   @map("deleted_at") @db.Timestamptz(6)
+
+  claims CustomerMissionClaim[]
+
+  @@index([isActive], map: "idx_loyalty_missions_is_active")
+  @@index([deletedAt], map: "idx_loyalty_missions_deleted_at")
+  @@map("loyalty_missions")
+}
+
+/// Tracks customer mission claims (idempotent per customer+mission).
+model CustomerMissionClaim {
+  id         String   @id @default(uuid()) @db.Uuid
+  customerId String   @map("customer_id") @db.Uuid
+  missionId  String   @map("mission_id") @db.Uuid
+  claimedAt  DateTime @default(now()) @map("claimed_at") @db.Timestamptz(6)
+
+  customer Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  mission  LoyaltyMission @relation(fields: [missionId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([customerId, missionId], map: "idx_customer_mission_claims_unique")
+  @@index([customerId], map: "idx_customer_mission_claims_customer_id")
+  @@map("customer_mission_claims")
+}
+
+enum WalletTopUpRequestStatus {
+  pending
+  completed
+  failed
+  cancelled
+
+  @@map("wallet_top_up_request_status")
+}
+
+/// Customer-initiated wallet top-up payment request.
+model WalletTopUpRequest {
+  id              String                   @id @default(uuid()) @db.Uuid
+  customerId      String                   @map("customer_id") @db.Uuid
+  amount          Decimal                  @db.Decimal(15, 2)
+  paymentMethod   String                   @map("payment_method") @db.VarChar(30)
+  status          WalletTopUpRequestStatus @default(pending)
+  referenceNumber String                   @unique @map("reference_number") @db.VarChar(50)
+  walletTxnId     String?                  @unique @map("wallet_txn_id") @db.Uuid
+  completedAt     DateTime?                @map("completed_at") @db.Timestamptz(6)
+  createdAt       DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([customerId], map: "idx_wallet_top_up_requests_customer_id")
+  @@index([status], map: "idx_wallet_top_up_requests_status")
+  @@map("wallet_top_up_requests")
 }
 
 // ---------------------------------------------------------------------------
@@ -819,6 +1123,10 @@ model Order {
   orderStatus         OrderStatus         @default(CREATED) @map("order_status")
   paymentMethod       OrderPaymentMethod? @map("payment_method")
   notes               String?             @db.Text
+  storageBoxId                  String?   @map("storage_box_id") @db.Uuid
+  lastStorageBoxId              String?   @map("last_storage_box_id") @db.Uuid
+  storageAssignedAt             DateTime? @map("storage_assigned_at") @db.Timestamptz(6)
+  storageAssignedByEmployeeId   String?   @map("storage_assigned_by_employee_id") @db.Uuid
   createdByEmployeeId String              @map("created_by_employee_id") @db.Uuid
   updatedByEmployeeId String?             @map("updated_by_employee_id") @db.Uuid
   createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -839,9 +1147,17 @@ model Order {
   ironingJobs       IroningJob[]
   pickupJob         PickupJob?
   deliveryJob       DeliveryJob?
-  driverActivities  DriverActivity[]
+  driverActivities       DriverActivity[]
+  customerServiceTickets CustomerServiceTicket[]
+  storageBox             StorageBox?            @relation("OrderCurrentStorageBox", fields: [storageBoxId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  lastStorageBox         StorageBox?            @relation("OrderLastStorageBox", fields: [lastStorageBoxId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  storageAssignedBy      Employee?              @relation("OrderStorageAssignedBy", fields: [storageAssignedByEmployeeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  storageAssignments     OrderStorageAssignment[]
+  receiptDeliveries      OrderReceiptDelivery[]
+  rewardEntitlementUsages RewardEntitlementUsage[]
 
   @@index([customerId], map: "idx_orders_customer_id")
+  @@index([storageBoxId], map: "idx_orders_storage_box_id")
   @@index([queueNumber], map: "idx_orders_queue_number")
   @@index([orderStatus], map: "idx_orders_order_status")
   @@index([paymentStatus], map: "idx_orders_payment_status")
@@ -1571,6 +1887,7 @@ model NotificationTemplate {
 model CustomerServiceTicket {
   id         String        @id @default(uuid()) @db.Uuid
   customerId String        @map("customer_id") @db.Uuid
+  orderId    String?       @map("order_id") @db.Uuid
   employeeId String?       @map("employee_id") @db.Uuid
   subject    String        @db.VarChar(200)
   status     TicketStatus  @default(OPEN)
@@ -1582,10 +1899,12 @@ model CustomerServiceTicket {
 
   // Relations
   customer Customer                 @relation(fields: [customerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  order    Order?                   @relation(fields: [orderId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   employee Employee?                @relation("CsTicketAssignee", fields: [employeeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   messages CustomerServiceMessage[]
 
   @@index([customerId], map: "idx_customer_service_tickets_customer_id")
+  @@index([orderId], map: "idx_customer_service_tickets_order_id")
   @@index([employeeId], map: "idx_customer_service_tickets_employee_id")
   @@index([status], map: "idx_customer_service_tickets_status")
   @@index([priority], map: "idx_customer_service_tickets_priority")
@@ -1728,6 +2047,41 @@ model SystemSetting {
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("system_settings")
+}
+
+// ---------------------------------------------------------------------------
+// OrderReceiptDelivery
+// ---------------------------------------------------------------------------
+
+enum OrderReceiptDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+  NOT_CONFIGURED
+}
+
+/// WhatsApp receipt generation and delivery tracking for internal orders.
+model OrderReceiptDelivery {
+  id                    String                     @id @default(uuid()) @db.Uuid
+  orderId               String                     @map("order_id") @db.Uuid
+  messageText           String                     @map("message_text") @db.Text
+  paymentStatusSnapshot OrderPaymentStatus         @map("payment_status_snapshot")
+  paymentMethodSnapshot String?                    @map("payment_method_snapshot") @db.VarChar(50)
+  customerPhone         String?                    @map("customer_phone") @db.VarChar(30)
+  deliveryChannel       String                     @default("WHATSAPP") @map("delivery_channel") @db.VarChar(20)
+  deliveryStatus        OrderReceiptDeliveryStatus @default(PENDING) @map("delivery_status")
+  failureReason         String?                    @map("failure_reason") @db.Text
+  sentAt                DateTime?                  @map("sent_at") @db.Timestamptz(6)
+  createdByEmployeeId   String                     @map("created_by_employee_id") @db.Uuid
+  createdAt             DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  order             Order    @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  createdByEmployee Employee @relation("OrderReceiptCreatedBy", fields: [createdByEmployeeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([orderId], map: "idx_order_receipt_deliveries_order_id")
+  @@index([deliveryStatus], map: "idx_order_receipt_deliveries_status")
+  @@map("order_receipt_deliveries")
 }
 
 // ---------------------------------------------------------------------------
@@ -1926,4 +2280,70 @@ model PayrollPayment {
 
   @@index([payrollRecordId], map: "idx_payroll_payments_payroll_record_id")
   @@map("payroll_payments")
+}
+
+// ===========================================================================
+// Storage Module — Laci & Kotak Laundry
+// ===========================================================================
+
+enum StorageAssignmentAction {
+  ASSIGNED
+  MOVED
+  RELEASED
+
+  @@map("storage_assignment_action")
+}
+
+/// Physical locker row (Laci A/B/C).
+model StorageLocker {
+  id        String   @id @default(uuid()) @db.Uuid
+  code      String   @unique @db.VarChar(10)
+  name      String   @db.VarChar(50)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  boxes StorageBox[]
+
+  @@map("storage_lockers")
+}
+
+/// Individual storage box within a locker (A-01 … C-15).
+model StorageBox {
+  id        String   @id @default(uuid()) @db.Uuid
+  lockerId  String   @map("locker_id") @db.Uuid
+  boxNumber Int      @map("box_number")
+  code      String   @unique @db.VarChar(10)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  locker        StorageLocker            @relation(fields: [lockerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  currentOrders Order[]                  @relation("OrderCurrentStorageBox")
+  lastOrders    Order[]                  @relation("OrderLastStorageBox")
+  assignments   OrderStorageAssignment[]
+
+  @@unique([lockerId, boxNumber], map: "idx_storage_boxes_locker_box_number")
+  @@index([lockerId], map: "idx_storage_boxes_locker_id")
+  @@map("storage_boxes")
+}
+
+/// Historical record of storage assignments, moves, and releases.
+model OrderStorageAssignment {
+  id                   String                  @id @default(uuid()) @db.Uuid
+  orderId              String                  @map("order_id") @db.Uuid
+  storageBoxId         String                  @map("storage_box_id") @db.Uuid
+  previousStorageBoxId String?                 @map("previous_storage_box_id") @db.Uuid
+  action               StorageAssignmentAction
+  assignedByEmployeeId String?                 @map("assigned_by_employee_id") @db.Uuid
+  createdAt            DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  order        Order       @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  storageBox   StorageBox  @relation(fields: [storageBoxId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  assignedBy   Employee?   @relation("StorageAssignmentActor", fields: [assignedByEmployeeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([orderId], map: "idx_order_storage_assignments_order_id")
+  @@index([storageBoxId], map: "idx_order_storage_assignments_storage_box_id")
+  @@index([createdAt], map: "idx_order_storage_assignments_created_at")
+  @@map("order_storage_assignments")
 }

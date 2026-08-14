@@ -41,4 +41,12 @@ abstract final class DateDisplayHelper {
   }
 
   static String currentLongIndonesianDate() => longIndonesianDate(DateTime.now());
+
+  /// ISO date (`yyyy-MM-dd`) for order list API filters.
+  static String todayApiDateParam([DateTime? dateTime]) {
+    final now = dateTime ?? DateTime.now();
+    final month = now.month.toString().padLeft(2, '0');
+    final day = now.day.toString().padLeft(2, '0');
+    return '${now.year}-$month-$day';
+  }
 }

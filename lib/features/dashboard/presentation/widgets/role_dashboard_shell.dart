@@ -3,11 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/core/role/role.dart';
+import 'package:yelo_laundry_erp/core/role/staff_permissions.dart';
+import 'package:yelo_laundry_erp/core/session/session_provider.dart';
 import 'package:yelo_laundry_erp/features/binatu/providers/binatu_order_provider.dart';
 import 'package:yelo_laundry_erp/features/dashboard/models/user_role.dart';
 import 'package:yelo_laundry_erp/features/dashboard/providers/dashboard_shell_tab_provider.dart';
+import 'package:yelo_laundry_erp/features/dashboard/providers/operational_summary_provider.dart';
 import 'package:yelo_laundry_erp/features/dashboard/presentation/widgets/erp_bottom_navigation.dart';
-import 'package:yelo_laundry_erp/features/orders/data/dummy_incoming_orders.dart';
 
 class RoleDashboardShell extends ConsumerStatefulWidget {
   const RoleDashboardShell({
@@ -36,12 +38,20 @@ class _RoleDashboardShellState extends ConsumerState<RoleDashboardShell> {
   @override
   Widget build(BuildContext context) {
     final activeIndex = _activeIndex;
+    final maxIndex = widget.pages.length - 1;
+    final safeActiveIndex = activeIndex.clamp(0, maxIndex);
+
+    final summaryAsync = ref.watch(operationalSummaryProvider);
+    final orderBadgeCount = summaryAsync.maybeWhen(
+      data: (summary) => summary.newOrders,
+      orElse: () => 0,
+    );
 
     return Scaffold(
       key: ValueKey('${widget.role.name}-dashboard-shell'),
       backgroundColor: widget.backgroundColor,
       body: IndexedStack(
-        index: activeIndex,
+        index: safeActiveIndex,
         children: [
           for (var i = 0; i < widget.pages.length; i++)
             KeyedSubtree(
@@ -52,13 +62,15 @@ class _RoleDashboardShellState extends ConsumerState<RoleDashboardShell> {
       ),
       bottomNavigationBar: ErpBottomNavigation(
         role: widget.role,
-        currentIndex: activeIndex,
-        orderBadgeCount: dummyNewIncomingOrderCount(),
+        permissions: staffPermissionsFromSession(ref.watch(sessionProvider)),
+        currentIndex: safeActiveIndex,
+        orderBadgeCount: orderBadgeCount,
         onTap: (index) {
+          final nextIndex = index.clamp(0, maxIndex);
           if (widget.role == UserRole.laundry) {
-            ref.read(binatuDashboardTabProvider.notifier).setTab(index);
+            ref.read(binatuDashboardTabProvider.notifier).setTab(nextIndex);
           } else {
-            ref.read(dashboardShellTabProvider.notifier).setTab(index);
+            ref.read(dashboardShellTabProvider.notifier).setTab(nextIndex);
           }
         },
       ),

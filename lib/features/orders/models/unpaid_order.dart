@@ -163,3 +163,58 @@ class UnpaidOrder {
   Color get accentBarColor =>
       lateDays > 3 ? AppColors.accent : AppColors.primary;
 }
+
+List<UnpaidOrder> filterUnpaidOrders({
+  required List<UnpaidOrder> orders,
+  required String query,
+  required UnpaidOrderFilter filter,
+}) {
+  final normalizedQuery = query.trim().toLowerCase();
+
+  return orders.where((order) {
+    final matchesQuery = normalizedQuery.isEmpty ||
+        order.customerName.toLowerCase().contains(normalizedQuery) ||
+        order.queueNumber.toLowerCase().contains(normalizedQuery) ||
+        order.invoiceNumber.toLowerCase().contains(normalizedQuery) ||
+        order.customerPhone.toLowerCase().contains(normalizedQuery);
+
+    if (!matchesQuery) return false;
+
+    return switch (filter) {
+      UnpaidOrderFilter.semua => true,
+      UnpaidOrderFilter.belumDibayar =>
+        order.paymentStatus == UnpaidPaymentStatus.belumDibayar,
+      UnpaidOrderFilter.terlambatDiambil => order.isOverdue,
+      UnpaidOrderFilter.pickup => order.hasPickup,
+      UnpaidOrderFilter.delivery => order.hasDelivery,
+    };
+  }).toList();
+}
+
+List<UnpaidOrder> sortUnpaidOrders({
+  required List<UnpaidOrder> orders,
+  required UnpaidOrderSort sort,
+}) {
+  final sorted = [...orders];
+
+  sorted.sort((a, b) {
+    return switch (sort) {
+      UnpaidOrderSort.tanggalMasuk => b.receivedAt.compareTo(a.receivedAt),
+      UnpaidOrderSort.nomorAntrian => a.queueNumber.compareTo(b.queueNumber),
+      UnpaidOrderSort.namaCustomer => a.customerName.compareTo(b.customerName),
+      UnpaidOrderSort.nilaiTagihan => b.totalAmount.compareTo(a.totalAmount),
+      UnpaidOrderSort.jumlahDenda => b.lateFee.compareTo(a.lateFee),
+    };
+  });
+
+  return sorted;
+}
+
+UnpaidOrdersSummary computeUnpaidOrdersSummary(List<UnpaidOrder> orders) {
+  return UnpaidOrdersSummary(
+    totalOrders: orders.length,
+    totalReceivable: orders.fold(0, (sum, order) => sum + order.totalAmount),
+    dueTodayCount: orders.where((order) => order.isDueToday).length,
+    latePickupCount: orders.where((order) => order.isOverdue).length,
+  );
+}

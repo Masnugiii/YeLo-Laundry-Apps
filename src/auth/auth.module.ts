@@ -12,6 +12,8 @@ import { PermissionsGuard } from './guards/permissions.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { OtpRepository } from './otp/otp.repository';
 import { OtpService } from './otp/otp.service';
+import { CustomerAvatarService } from './customer-avatar.service';
+import { DevOtpPlaintextStore } from '../dev/dev-otp-plaintext.store';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
 @Module({
@@ -38,6 +40,8 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     AuthRepository,
     OtpRepository,
     OtpService,
+    CustomerAvatarService,
+    DevOtpPlaintextStore,
     JwtStrategy,
     RolesGuard,
     PermissionsGuard,
@@ -58,6 +62,8 @@ import { JwtStrategy } from './strategies/jwt.strategy';
   exports: [
     AuthService,
     OtpService,
+    OtpRepository,
+    DevOtpPlaintextStore,
     JwtModule,
     PassportModule,
     JwtAuthGuard,

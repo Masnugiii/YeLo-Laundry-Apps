@@ -1,5 +1,6 @@
 import 'package:yelo_laundry_erp/features/new_order/models/laundry_service.dart';
 import 'package:yelo_laundry_erp/features/new_order/models/selected_service_form.dart';
+import 'package:yelo_laundry_erp/features/points/models/yelo_rewards_models.dart';
 
 class SelectedOrderService {
   SelectedOrderService({
@@ -12,6 +13,17 @@ class SelectedOrderService {
   SelectedServiceForm form;
 
   LaundryService get service => form.service;
+
+  int subtotalWithEntitlement(CksEntitlement? entitlement) {
+    if (entitlement == null || !service.isCks) {
+      return (service.unitPrice * quantity).round();
+    }
+    final freeKg = quantity < entitlement.remainingKg
+        ? quantity
+        : entitlement.remainingKg;
+    final billableKg = quantity - freeKg;
+    return (service.unitPrice * billableKg).round();
+  }
 
   int get subtotal => (service.unitPrice * quantity).round();
 

@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:yelo_laundry_erp/features/binatu/data/dummy_binatu_dashboard_badges.dart';
+import 'package:yelo_laundry_erp/core/providers/core_providers.dart';
 import 'package:yelo_laundry_erp/features/binatu/models/binatu_ironing_status.dart';
 
 class BinatuDashboardBadgeState {
@@ -38,12 +38,30 @@ class BinatuDashboardBadgeState {
 class BinatuDashboardBadgeNotifier extends Notifier<BinatuDashboardBadgeState> {
   @override
   BinatuDashboardBadgeState build() {
-    return BinatuDashboardBadgeState(
-      ironingQueueUnreadCount: dummyBinatuIroningQueueUnreadCount(),
-      currentlyIroningUnreadCount: dummyBinatuCurrentlyIroningUnreadCount(),
-      finishedIroningUnreadCount: dummyBinatuFinishedIroningUnreadCount(),
-      readyForPickupUnreadCount: dummyBinatuReadyForPickupUnreadCount(),
+    Future.microtask(_loadApiCounts);
+    return const BinatuDashboardBadgeState(
+      ironingQueueUnreadCount: 0,
+      currentlyIroningUnreadCount: 0,
+      finishedIroningUnreadCount: 0,
+      readyForPickupUnreadCount: 0,
     );
+  }
+
+  Future<void> _loadApiCounts() async {
+    try {
+      final dashboard =
+          await ref.read(laundryRepositoryProvider).fetchDashboard();
+      state = state.copyWith(
+        ironingQueueUnreadCount:
+            (dashboard['waitingIroning'] as num?)?.toInt() ?? 0,
+        currentlyIroningUnreadCount:
+            (dashboard['currentlyIroning'] as num?)?.toInt() ?? 0,
+        finishedIroningUnreadCount:
+            (dashboard['qualityCheck'] as num?)?.toInt() ?? 0,
+        readyForPickupUnreadCount:
+            (dashboard['readyForPickup'] as num?)?.toInt() ?? 0,
+      );
+    } catch (_) {}
   }
 
   void markIroningQueueRead() {

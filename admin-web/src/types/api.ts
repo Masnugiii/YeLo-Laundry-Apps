@@ -2,6 +2,7 @@ export interface ApiEnvelope<T> {
   success: boolean;
   message: string;
   data: T;
+  errors?: Record<string, unknown> | unknown[];
 }
 
 export interface PaginationMeta {

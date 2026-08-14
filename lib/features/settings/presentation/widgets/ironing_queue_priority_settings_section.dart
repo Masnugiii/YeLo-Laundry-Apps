@@ -45,7 +45,7 @@ class IroningQueuePrioritySettingsSection extends ConsumerWidget {
             AppSpacing.s12,
           ),
           child: DropdownButtonFormField<int>(
-            value: settings.waitingTimeMinutes,
+            initialValue: settings.waitingTimeMinutes,
             decoration: InputDecoration(
               filled: true,
               fillColor: AppColors.dashboardBackground,

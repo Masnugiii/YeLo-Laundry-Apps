@@ -19,14 +19,16 @@ export class MembershipService {
     const settings = await this.settingsService.getSettings();
     const lifetimePoints = await this.getLifetimePoints(customerId);
     const currentPoints = await this.getCurrentPoints(customerId);
-    const levels = [...settings.membershipLevels].sort(
-      (a, b) => b.minPoints - a.minPoints,
+    const activeLevels = settings.membershipLevels.filter(
+      (level) => level.active !== false,
     );
+    const levels = [...activeLevels].sort((a, b) => b.minPoints - a.minPoints);
 
     const currentLevel =
       levels.find((level) => lifetimePoints >= level.minPoints) ??
+      activeLevels[0] ??
       settings.membershipLevels[0];
-    const nextLevel = this.getNextLevel(settings.membershipLevels, currentLevel);
+    const nextLevel = this.getNextLevel(activeLevels, currentLevel);
     const pointsToNext = nextLevel
       ? Math.max(nextLevel.minPoints - lifetimePoints, 0)
       : 0;
@@ -58,13 +60,15 @@ export class MembershipService {
     });
 
     let earned = 0;
-    let used = 0;
+    let redeemed = 0;
     let expired = 0;
+    let clawback = 0;
 
     for (const row of rows) {
       if (row.type === RewardPointType.earn) earned += row.point;
-      if (row.type === RewardPointType.redeem) used += Math.abs(row.point);
+      if (row.type === RewardPointType.redeem) redeemed += Math.abs(row.point);
       if (row.type === RewardPointType.expired) expired += Math.abs(row.point);
+      if (row.type === RewardPointType.clawback) clawback += Math.abs(row.point);
     }
 
     const currentPoint = await this.getCurrentPoints(customerId);
@@ -72,8 +76,10 @@ export class MembershipService {
     return {
       currentPoint,
       earned,
-      used,
+      redeemed,
+      used: redeemed + clawback,
       expired,
+      clawback,
       lifetimePoint: earned,
     };
   }
@@ -82,8 +88,13 @@ export class MembershipService {
     lifetimePoints: number,
     levels: MembershipLevel[],
   ): MembershipLevel {
-    const sorted = [...levels].sort((a, b) => b.minPoints - a.minPoints);
-    return sorted.find((level) => lifetimePoints >= level.minPoints) ?? levels[0];
+    const activeLevels = levels.filter((level) => level.active !== false);
+    const sorted = [...activeLevels].sort((a, b) => b.minPoints - a.minPoints);
+    return (
+      sorted.find((level) => lifetimePoints >= level.minPoints) ??
+      activeLevels[0] ??
+      levels[0]
+    );
   }
 
   private getNextLevel(
@@ -115,8 +126,14 @@ export class MembershipService {
         deletedAt: null,
         OR: [{ expiredAt: null }, { expiredAt: { gt: now } }],
       },
-      select: { point: true },
+      select: { point: true, type: true },
     });
-    return rows.reduce((sum, row) => sum + row.point, 0);
+    return rows.reduce((sum, row) => {
+      // Expired ledger rows are recorded separately; do not double-count.
+      if (row.type === RewardPointType.expired) {
+        return sum;
+      }
+      return sum + row.point;
+    }, 0);
   }
 }

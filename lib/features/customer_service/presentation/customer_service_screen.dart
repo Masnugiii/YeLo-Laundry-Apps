@@ -13,6 +13,7 @@ import 'package:yelo_laundry_erp/features/customer_service/presentation/widgets/
 import 'package:yelo_laundry_erp/features/customer_service/presentation/widgets/whatsapp_message_card.dart';
 import 'package:yelo_laundry_erp/features/customer_service/providers/customer_service_provider.dart';
 import 'package:yelo_laundry_erp/features/dashboard/providers/dashboard_menu_badge_actions.dart';
+import 'package:yelo_laundry_erp/shared/widgets/api_state_widgets.dart';
 import 'package:yelo_laundry_erp/shared/widgets/selectable_chip.dart';
 
 class CustomerServiceScreen extends ConsumerStatefulWidget {
@@ -101,23 +102,10 @@ class _CustomerServiceScreenState extends ConsumerState<CustomerServiceScreen> {
         ],
       ),
       body: listState.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Gagal memuat percakapan.',
-                style: GoogleFonts.poppins(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.s12),
-              TextButton(onPressed: _reload, child: const Text('Coba lagi')),
-            ],
-          ),
+        loading: () => const ApiLoadingView(message: 'Memuat percakapan...'),
+        error: (error, _) => ApiErrorView(
+          message: messageFromError(error),
+          onRetry: _reload,
         ),
         data: (state) {
           final filtered = state.conversations;

@@ -23,10 +23,10 @@ class OrderRepository {
         'page': page,
         'limit': limit,
         if (search != null && search.isNotEmpty) 'search': search,
-        if (status != null) 'status': status,
-        if (paymentStatus != null) 'paymentStatus': paymentStatus,
-        if (dateFrom != null) 'dateFrom': dateFrom,
-        if (dateTo != null) 'dateTo': dateTo,
+        'status': ?status,
+        'paymentStatus': ?paymentStatus,
+        'dateFrom': ?dateFrom,
+        'dateTo': ?dateTo,
       },
       parser: (json) => json as Map<String, dynamic>,
     );
@@ -147,6 +147,9 @@ class OrderRepository {
           ? OrderPaymentStatus.lunas
           : OrderPaymentStatus.belumLunas,
       timelineEntries: timeline,
+      customerId: json['customerId'] as String?,
+      customerWalletBalance:
+          (json['customerWalletBalance'] as num?)?.toInt(),
     );
   }
 

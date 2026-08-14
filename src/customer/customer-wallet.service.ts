@@ -1,10 +1,13 @@
 import {
+  Inject,
   Injectable,
   NotFoundException,
   UnprocessableEntityException,
+  forwardRef,
 } from '@nestjs/common';
 import { WalletTransactionType } from '@prisma/client';
 import { ApiSuccessResponse } from '../common/interfaces/api-response.interface';
+import { RewardService } from '../loyalty/reward.service';
 import { AdjustWalletDto, WalletAdjustDirection } from './dto/adjust-wallet.dto';
 import { DeductWalletDto } from './dto/deduct-wallet.dto';
 import { TopupWalletDto } from './dto/topup-wallet.dto';
@@ -24,6 +27,8 @@ export class CustomerWalletService {
   constructor(
     private readonly customerRepository: CustomerRepository,
     private readonly walletRepository: CustomerWalletRepository,
+    @Inject(forwardRef(() => RewardService))
+    private readonly rewardService: RewardService,
   ) {}
 
   async getWallet(
@@ -92,7 +97,18 @@ export class CustomerWalletService {
       employeeId,
       referenceNumber,
       isCredit: true,
+      referenceType: 'WALLET_TOPUP',
     });
+
+    if (!('insufficientBalance' in result)) {
+      await this.rewardService.earnFromDeposit(
+        customerId,
+        dto.amount,
+        'WALLET_TOPUP',
+        result.transaction.id,
+        employeeId,
+      );
+    }
 
     return this.buildMutationResponse(result, 'Wallet top-up successful');
   }

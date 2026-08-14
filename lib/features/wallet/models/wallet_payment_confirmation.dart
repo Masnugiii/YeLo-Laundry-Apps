@@ -47,7 +47,7 @@ class WalletPaymentConfirmation {
     return '$hour:$minute';
   }
 
-  static String dummyReferenceNumber(DateTime dateTime) {
+  static String generateReferenceNumber(DateTime dateTime) {
     final year = dateTime.year;
     final month = dateTime.month.toString().padLeft(2, '0');
     final day = dateTime.day.toString().padLeft(2, '0');

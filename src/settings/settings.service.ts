@@ -15,12 +15,19 @@ import { AttendanceConfigService } from './config/attendance-config.service';
 import { BackupSettingsService } from './config/backup-settings.service';
 import { DocumentRulesService } from './config/document-rules.service';
 import { NotificationConfigService } from './config/notification-config.service';
+import { PaymentConfigService } from './config/payment-config.service';
+import { ReceiptConfigService } from './config/receipt-config.service';
 import { ConfigAuditService } from './audit/config-audit.service';
+import { NumberingService } from '../numbering/numbering.service';
+import { UpdateReceiptSettingsDto } from './dto/update-receipt-settings.dto';
+import { UpdateNumberingSequenceDto } from '../numbering/numbering.dto';
+import { UpdateNumberingSettingsDto, UpdateQueueSettingsDto } from './dto/update-queue-settings.dto';
 import { UpdateAttendanceSettingsDto } from './dto/update-attendance-settings.dto';
 import { UpdateBackupSettingsDto } from './dto/update-backup-settings.dto';
 import { UpdateCompanySettingsDto } from './dto/update-company-settings.dto';
 import { UpdateDocumentRulesDto } from './dto/update-document-rules.dto';
 import { UpdateNotificationSettingsDto } from './dto/update-notification-settings.dto';
+import { UpdatePaymentSettingsDto } from './dto/update-payment-settings.dto';
 import {
   isSettingsSection,
   isWritableSettingsSection,
@@ -44,6 +51,9 @@ export class SettingsService {
     private readonly documentRulesService: DocumentRulesService,
     private readonly backupSettingsService: BackupSettingsService,
     private readonly notificationConfigService: NotificationConfigService,
+    private readonly paymentConfigService: PaymentConfigService,
+    private readonly receiptConfigService: ReceiptConfigService,
+    private readonly numberingService: NumberingService,
   ) {}
 
   async getManifest(): Promise<SettingsManifestResponse> {
@@ -104,8 +114,17 @@ export class SettingsService {
       case 'notifications':
         after = await this.updateNotificationsSection(body);
         break;
+      case 'payment':
+        after = await this.updatePaymentSection(body);
+        break;
       case 'backup':
         after = await this.updateBackupSection(body);
+        break;
+      case 'receipt':
+        after = await this.updateReceiptSection(body);
+        break;
+      case 'numbering':
+        after = await this.updateNumberingSection(body, employeeId);
         break;
       default:
         throw new BadRequestException(
@@ -163,6 +182,8 @@ export class SettingsService {
         };
       case 'attendance':
         return this.attendanceConfigService.getConfig();
+      case 'payment':
+        return this.paymentConfigService.getConfig();
       case 'payment_methods':
         return this.prisma.paymentMethod.findMany({
           where: { deletedAt: null },
@@ -179,6 +200,8 @@ export class SettingsService {
         return this.backupSettingsService.getSettings();
       case 'documents':
         return this.documentRulesService.getRules();
+      case 'receipt':
+        return this.receiptConfigService.getConfig();
       case 'numbering': {
         const sequences = await this.prisma.numberingSequence.findMany({
           orderBy: { type: 'asc' },
@@ -244,8 +267,62 @@ export class SettingsService {
     return this.notificationConfigService.updateConfig(dto);
   }
 
+  private async updatePaymentSection(body: unknown): Promise<unknown> {
+    const dto = await validateSettingsDto(UpdatePaymentSettingsDto, body);
+    return this.paymentConfigService.updateConfig(dto);
+  }
+
   private async updateBackupSection(body: unknown): Promise<unknown> {
     const dto = await validateSettingsDto(UpdateBackupSettingsDto, body);
     return this.backupSettingsService.updateSettings(dto);
+  }
+
+  private async updateReceiptSection(body: unknown): Promise<unknown> {
+    const dto = await validateSettingsDto(UpdateReceiptSettingsDto, body);
+    return this.receiptConfigService.updateConfig(dto);
+  }
+
+  private async updateNumberingSection(
+    body: unknown,
+    employeeId: string,
+  ): Promise<unknown> {
+    const payload = body as Record<string, unknown>;
+
+    if (payload.queue && typeof payload.queue === 'object') {
+      const queueInput = await validateSettingsDto(
+        UpdateQueueSettingsDto,
+        payload.queue,
+      );
+
+      const existing = await this.prisma.queueSetting.findFirst({
+        orderBy: { createdAt: 'asc' },
+      });
+
+      if (!existing) {
+        return this.prisma.queueSetting.create({
+          data: {
+            prefix: queueInput.prefix ?? 'A',
+            startingNumber: queueInput.startingNumber ?? 1,
+            dailyReset: queueInput.dailyReset ?? true,
+          },
+        });
+      }
+
+      return this.prisma.queueSetting.update({
+        where: { id: existing.id },
+        data: {
+          ...(queueInput.prefix !== undefined && { prefix: queueInput.prefix }),
+          ...(queueInput.startingNumber !== undefined && {
+            startingNumber: queueInput.startingNumber,
+          }),
+          ...(queueInput.dailyReset !== undefined && {
+            dailyReset: queueInput.dailyReset,
+          }),
+        },
+      });
+    }
+
+    const dto = await validateSettingsDto(UpdateNumberingSequenceDto, body);
+    return this.numberingService.updateConfiguration(dto, employeeId);
   }
 }

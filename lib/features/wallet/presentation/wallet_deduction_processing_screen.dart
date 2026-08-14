@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
 import 'package:yelo_laundry_erp/features/wallet/models/wallet_payment_confirmation.dart';
+import 'package:yelo_laundry_erp/shared/widgets/flow_exit_scope.dart';
 
 class WalletDeductionProcessingScreen extends StatefulWidget {
   const WalletDeductionProcessingScreen({
@@ -37,7 +38,9 @@ class _WalletDeductionProcessingScreenState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return ProcessingBackGuard(
+      isProcessing: true,
+      child: Scaffold(
       backgroundColor: AppColors.dashboardBackground,
       body: Center(
         child: Padding(
@@ -67,6 +70,7 @@ class _WalletDeductionProcessingScreenState
           ),
         ),
       ),
+    ),
     );
   }
 }

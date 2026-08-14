@@ -4,7 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
-import 'package:yelo_laundry_erp/features/customer/data/dummy_occupations.dart';
+import 'package:yelo_laundry_erp/features/customer/data/staff_occupation_options.dart';
 import 'package:yelo_laundry_erp/features/customer/models/customer.dart';
 import 'package:yelo_laundry_erp/features/customer/presentation/widgets/customer_form_field.dart';
 import 'package:yelo_laundry_erp/features/customer/utils/phone_validator.dart';
@@ -117,7 +117,7 @@ class CustomerFormState extends State<CustomerForm> {
                   fontSize: 15,
                   color: AppColors.textPrimary,
                 ),
-                items: dummyOccupations
+                items: StaffOccupationOptions.choices
                     .map(
                       (occupation) => DropdownMenuItem(
                         value: occupation,

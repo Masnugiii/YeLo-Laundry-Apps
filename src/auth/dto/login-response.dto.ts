@@ -15,6 +15,9 @@ export class LoginUserDto {
 
   @ApiProperty({ example: ['OWNER'], type: [String] })
   roles!: string[];
+
+  @ApiProperty({ example: ['dashboard', 'orders'], type: [String] })
+  permissions!: string[];
 }
 
 export class LoginResponseDto {

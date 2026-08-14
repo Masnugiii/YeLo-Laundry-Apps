@@ -5,7 +5,7 @@ import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_shadows.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
 import 'package:yelo_laundry_erp/features/new_order/utils/currency_formatter.dart';
-import 'package:yelo_laundry_erp/features/notifications/data/dummy_cashier_notifications.dart';
+import 'package:yelo_laundry_erp/features/notifications/utils/notification_formatters.dart';
 import 'package:yelo_laundry_erp/features/notifications/models/cashier_transaction_notification.dart';
 
 class CashierTransactionNotificationCard extends StatelessWidget {

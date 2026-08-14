@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+ always masks windowSplashScreenAnimatedIcon into a circle.
+  Use a solid YeLo-blue placeholder so the OS never shows a circular logo /
+  launcher icon. The real splash artwork is splash_logo in launch_background
+  (pre-12 / post-system-splash) and Logo_SplashLoading.png on Flutter.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/splash_background" />
+</shape>

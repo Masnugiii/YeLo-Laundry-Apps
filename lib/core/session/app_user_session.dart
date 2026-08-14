@@ -8,6 +8,7 @@ class AppUserSession {
     required this.phone,
     required this.role,
     required this.roles,
+    this.permissions = const [],
     this.isAuthenticated = false,
   });
 
@@ -17,6 +18,7 @@ class AppUserSession {
   final String phone;
   final UserRole role;
   final List<String> roles;
+  final List<String> permissions;
   final bool isAuthenticated;
 
   AppUserSession copyWith({
@@ -26,6 +28,7 @@ class AppUserSession {
     String? phone,
     UserRole? role,
     List<String>? roles,
+    List<String>? permissions,
     bool? isAuthenticated,
   }) {
     return AppUserSession(
@@ -35,6 +38,7 @@ class AppUserSession {
       phone: phone ?? this.phone,
       role: role ?? this.role,
       roles: roles ?? this.roles,
+      permissions: permissions ?? this.permissions,
       isAuthenticated: isAuthenticated ?? this.isAuthenticated,
     );
   }
@@ -47,6 +51,7 @@ class AppUserSession {
       'phone': phone,
       'role': role.name,
       'roles': roles,
+      'permissions': permissions,
       'isAuthenticated': isAuthenticated,
     };
   }
@@ -64,6 +69,9 @@ class AppUserSession {
       roles: (json['roles'] as List<dynamic>? ?? const [])
           .map((role) => role.toString())
           .toList(),
+      permissions: (json['permissions'] as List<dynamic>? ?? const [])
+          .map((permission) => permission.toString())
+          .toList(),
       isAuthenticated: json['isAuthenticated'] as bool? ?? false,
     );
   }
@@ -74,7 +82,8 @@ class AppUserSession {
     name: '',
     phone: '',
     role: UserRole.cashier,
-    roles: const [],
+    roles: [],
+    permissions: [],
     isAuthenticated: false,
   );
 }

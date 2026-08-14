@@ -8,6 +8,7 @@ import {
 import { OrderStatus } from '@prisma/client';
 import { ApiSuccessResponse } from '../common/interfaces/api-response.interface';
 import { CustomerRepository } from '../customer/customer.repository';
+import { CustomerWalletService } from '../customer/customer-wallet.service';
 import {
   API_NOTIFICATION_TYPES,
   NOTIFICATION_EVENTS,
@@ -28,9 +29,18 @@ import {
 } from './order.mapper';
 import { OrderAuditService } from './order-audit.service';
 import { OrderRepository } from './order.repository';
+import { OrderDetailRecord } from './order.select';
 import { OrderStatusTransitionService } from './order-status-transition.service';
 import { decodeOrderNotes, encodeOrderNotes } from './utils/order-meta.util';
+import {
+  buildStatusNotificationDedupKey,
+  resolveOrderStatusNotification,
+} from './utils/order-status-notification.util';
 import { LoyaltyProcessorService } from '../loyalty/loyalty-processor.service';
+import { RewardEntitlementService } from '../loyalty/reward-entitlement.service';
+import { CKS_SERVICE_TYPE } from '../loyalty/reward-entitlement.rules';
+import { TaxService } from '../common/services/tax.service';
+import { StorageService } from '../storage/storage.service';
 
 const TERMINAL_STATUSES: OrderStatus[] = [
   OrderStatus.COMPLETED,
@@ -44,10 +54,14 @@ export class OrderService {
   constructor(
     private readonly orderRepository: OrderRepository,
     private readonly customerRepository: CustomerRepository,
+    private readonly customerWalletService: CustomerWalletService,
     private readonly notificationEventService: NotificationEventService,
     private readonly loyaltyProcessor: LoyaltyProcessorService,
+    private readonly rewardEntitlementService: RewardEntitlementService,
     private readonly orderStatusTransitionService: OrderStatusTransitionService,
     private readonly orderAuditService: OrderAuditService,
+    private readonly taxService: TaxService,
+    private readonly storageService: StorageService,
   ) {}
 
   async findAll(
@@ -142,10 +156,16 @@ export class OrderService {
       throw new NotFoundException('Order not found');
     }
 
+    const detail = toOrderDetail(order);
+    const wallet = await this.customerWalletService.getWallet(order.customerId);
+
     return {
       success: true,
       message: 'Order retrieved successfully',
-      data: toOrderDetail(order),
+      data: {
+        ...detail,
+        customerWalletBalance: wallet.data?.balance ?? 0,
+      },
     };
   }
 
@@ -165,12 +185,48 @@ export class OrderService {
 
     await this.validateAddresses(dto.customerId, dto);
 
-    const items = await this.buildOrderItems(dto.items);
+    let items = await this.buildOrderItems(dto.items);
+    let entitlementQuote: Awaited<
+      ReturnType<RewardEntitlementService['quoteApply']>
+    > | null = null;
+
+    if (dto.rewardRedemptionItemId) {
+      const cksItems = items.filter(
+        (item) => item.serviceCode.toUpperCase() === CKS_SERVICE_TYPE,
+      );
+      if (cksItems.length === 0) {
+        throw new BadRequestException(
+          'CKS entitlement requires at least one CKS laundry service line',
+        );
+      }
+
+      const orderKg = cksItems.reduce((sum, item) => {
+        const kg = Number(item.weight ?? item.quantity);
+        return sum + kg;
+      }, 0);
+
+      entitlementQuote = await this.rewardEntitlementService.quoteApply({
+        customerId: dto.customerId,
+        redemptionItemId: dto.rewardRedemptionItemId,
+        orderKg,
+        serviceType: CKS_SERVICE_TYPE,
+      });
+
+      items = this.applyCksEntitlementPricing(items, entitlementQuote);
+    }
+
+    const itemsSubtotal = items.reduce((sum, item) => sum + item.subtotal, 0);
+    const discount = dto.discountAmount ?? 0;
+    const serviceFee = dto.serviceFeeAmount ?? 0;
+    const tax = await this.taxService.calculateTaxFromSettings(
+      itemsSubtotal + serviceFee,
+      discount,
+    );
     const notes = encodeOrderNotes(
       {
-        discount: dto.discountAmount ?? 0,
-        tax: dto.taxAmount ?? 0,
-        serviceFee: dto.serviceFeeAmount ?? 0,
+        discount,
+        tax,
+        serviceFee,
       },
       dto.notes,
     );
@@ -185,7 +241,22 @@ export class OrderService {
       paymentMethod: dto.paymentMethod,
       notes,
       createdByEmployeeId: employeeId,
-      items,
+      items: items.map(({ serviceCode: _serviceCode, ...item }) => item),
+      afterCreate:
+        dto.rewardRedemptionItemId && entitlementQuote
+          ? async (tx, orderId) => {
+              await this.rewardEntitlementService.consumeInTx(tx, {
+                customerId: dto.customerId,
+                redemptionItemId: dto.rewardRedemptionItemId!,
+                orderId,
+                orderKg: entitlementQuote!.orderKg,
+                serviceType: CKS_SERVICE_TYPE,
+                employeeId,
+                expectedFreeKg: entitlementQuote!.freeKg,
+                expectedBillableKg: entitlementQuote!.billableKg,
+              });
+            }
+          : undefined,
     });
 
     this.logger.log(`Order created: ${order.id} (${order.invoiceNumber})`);
@@ -194,7 +265,9 @@ export class OrderService {
       employeeId,
       action: 'order_created',
       referenceId: order.id,
-      description: `Order ${order.invoiceNumber} created`,
+      description: entitlementQuote
+        ? `Order ${order.invoiceNumber} created with CKS entitlement (${entitlementQuote.freeKg} KG free / ${entitlementQuote.billableKg} KG paid)`
+        : `Order ${order.invoiceNumber} created`,
     });
 
     await this.notificationEventService.publish({
@@ -213,7 +286,20 @@ export class OrderService {
     return {
       success: true,
       message: 'Order created successfully',
-      data: toOrderDetail(order),
+      data: {
+        ...toOrderDetail(order),
+        ...(entitlementQuote
+          ? {
+              cksEntitlement: {
+                redemptionItemId: entitlementQuote.redemptionItemId,
+                freeKg: entitlementQuote.freeKg,
+                billableKg: entitlementQuote.billableKg,
+                orderKg: entitlementQuote.orderKg,
+                remainingKgAfter: entitlementQuote.remainingKgAfter,
+              },
+            }
+          : {}),
+      } as OrderDetail,
     };
   }
 
@@ -325,6 +411,11 @@ export class OrderService {
 
     if (dto.status === OrderStatus.COMPLETED) {
       await this.loyaltyProcessor.processOrderCompleted(order.id, employeeId);
+      await this.storageService.releaseForOrder(order.id, employeeId);
+    }
+
+    if (dto.status === OrderStatus.CANCELLED) {
+      await this.storageService.releaseForOrder(order.id, employeeId);
     }
 
     await this.orderAuditService.log({
@@ -332,6 +423,18 @@ export class OrderService {
       action: 'status_transition',
       referenceId: order.id,
       description: `Order status ${existing.orderStatus} -> ${dto.status}`,
+    });
+
+    await this.publishStatusChangeNotification(
+      order,
+      dto.status,
+      employeeId,
+    ).catch((error) => {
+      this.logger.warn(
+        `Failed to publish lifecycle notification for order ${order.id}: ${
+          error instanceof Error ? error.message : 'unknown error'
+        }`,
+      );
     });
 
     return {
@@ -445,7 +548,16 @@ export class OrderService {
   }
 
   private async buildOrderItems(items: CreateOrderDto['items']) {
-    const builtItems = [];
+    const builtItems: Array<{
+      serviceId: string;
+      serviceCode: string;
+      servicePriceId: string;
+      quantity: number;
+      weight?: number;
+      unitPrice: number;
+      subtotal: number;
+      notes?: string;
+    }> = [];
 
     for (const item of items) {
       const service = await this.orderRepository.findActiveService(
@@ -480,6 +592,7 @@ export class OrderService {
 
       builtItems.push({
         serviceId: item.serviceId,
+        serviceCode: service.serviceCode,
         servicePriceId: price.id,
         quantity,
         weight,
@@ -490,5 +603,79 @@ export class OrderService {
     }
 
     return builtItems;
+  }
+
+  /**
+   * Keep actual CKS weight/quantity for ops reporting; bill only billableKg.
+   */
+  private applyCksEntitlementPricing(
+    items: Array<{
+      serviceId: string;
+      serviceCode: string;
+      servicePriceId: string;
+      quantity: number;
+      weight?: number;
+      unitPrice: number;
+      subtotal: number;
+      notes?: string;
+    }>,
+    quote: {
+      freeKg: number;
+      billableKg: number;
+      orderKg: number;
+      rewardName: string;
+    },
+  ) {
+    let remainingFree = quote.freeKg;
+
+    return items.map((item) => {
+      if (item.serviceCode.toUpperCase() !== CKS_SERVICE_TYPE) {
+        return item;
+      }
+
+      const itemKg = Number(item.weight ?? item.quantity);
+      const freeForLine = Math.min(remainingFree, itemKg);
+      remainingFree = Number((remainingFree - freeForLine).toFixed(3));
+      const billableForLine = Number((itemKg - freeForLine).toFixed(3));
+
+      return {
+        ...item,
+        subtotal: calculateItemSubtotal(item.unitPrice, billableForLine),
+        notes: [
+          item.notes,
+          `CKS entitlement: ${freeForLine} KG free / ${billableForLine} KG paid (${quote.rewardName})`,
+        ]
+          .filter(Boolean)
+          .join(' | '),
+      };
+    });
+  }
+
+  private async publishStatusChangeNotification(
+    order: OrderDetailRecord,
+    newStatus: OrderStatus,
+    employeeId: string,
+  ): Promise<void> {
+    const config = resolveOrderStatusNotification(newStatus);
+    if (!config) {
+      return;
+    }
+
+    await this.notificationEventService.publish({
+      templateCode: config.templateCode,
+      type: config.type,
+      eventKey: `${order.id}:${newStatus}`,
+      deduplicateKey: buildStatusNotificationDedupKey(
+        config.templateCode,
+        order.id,
+      ),
+      senderEmployeeId: employeeId,
+      orderId: order.id,
+      orderNumber: order.invoiceNumber,
+      customerId: order.customerId,
+      customerName: order.customer.fullName,
+      notifyRoles: config.notifyRoles,
+      notifyCustomer: config.notifyCustomer,
+    });
   }
 }

@@ -28,15 +28,28 @@ import {
 
 const CONFIG_READ_ROLES = [ROLES.OWNER, ROLES.MANAGER] as const;
 
+const ORDER_COMPOSITION_ROLES = [
+  ROLES.OWNER,
+  ROLES.MANAGER,
+  ROLES.CASHIER,
+  ROLES.OPERATOR,
+] as const;
+
+const PAYMENT_CONFIG_READ_ROLES = [
+  ROLES.OWNER,
+  ROLES.MANAGER,
+  ROLES.CASHIER,
+] as const;
+
 @ApiTags('Settings')
 @ApiBearerAuth('access-token')
-@Permissions(PERMISSIONS.SETTINGS)
-@Roles(...CONFIG_READ_ROLES)
 @Controller('settings')
 export class SettingsController {
   constructor(private readonly settingsService: SettingsService) {}
 
   @Get()
+  @Permissions(PERMISSIONS.SETTINGS)
+  @Roles(...CONFIG_READ_ROLES)
   @ApiOperation({ summary: 'Get unified system configuration manifest' })
   async getSettings(): Promise<{
     success: true;
@@ -51,7 +64,35 @@ export class SettingsController {
     };
   }
 
+  @Get('company')
+  @Permissions(PERMISSIONS.ORDERS)
+  @Roles(...ORDER_COMPOSITION_ROLES)
+  @ApiOperation({ summary: 'Get company settings for operational order workflows' })
+  async getCompanySettings() {
+    const data = await this.settingsService.getSection('company');
+    return {
+      success: true,
+      message: 'Company settings retrieved successfully',
+      data,
+    };
+  }
+
+  @Get('payment')
+  @Permissions(PERMISSIONS.FINANCE)
+  @Roles(...PAYMENT_CONFIG_READ_ROLES)
+  @ApiOperation({ summary: 'Get payment configuration for operational payment workflows' })
+  async getPaymentSettings() {
+    const data = await this.settingsService.getSection('payment');
+    return {
+      success: true,
+      message: 'Payment settings retrieved successfully',
+      data,
+    };
+  }
+
   @Get(':section')
+  @Permissions(PERMISSIONS.SETTINGS)
+  @Roles(...CONFIG_READ_ROLES)
   @ApiOperation({ summary: 'Get a single configuration section' })
   @ApiParam({ name: 'section', description: 'Configuration section key' })
   async getSection(@Param() params: SettingsSectionParamDto) {
@@ -64,6 +105,7 @@ export class SettingsController {
   }
 
   @Patch(':section')
+  @Permissions(PERMISSIONS.SETTINGS)
   @Roles(ROLES.OWNER)
   @UseGuards(OwnerWriteGuard)
   @ApiOperation({ summary: 'Update a configuration section (OWNER only)' })

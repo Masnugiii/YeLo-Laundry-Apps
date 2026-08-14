@@ -56,17 +56,14 @@ class PointHistoryCard extends StatelessWidget {
                       const SizedBox(height: AppSpacing.s12),
                       _Field(
                         label: 'Sumber Point',
-                        value: transaction.source.label,
+                        value: transaction.description.isNotEmpty
+                            ? transaction.description
+                            : transaction.source.label,
                       ),
                       const SizedBox(height: AppSpacing.s12),
                       _Field(
                         label: 'Nomor Referensi',
                         value: transaction.referenceNumber,
-                      ),
-                      const SizedBox(height: AppSpacing.s12),
-                      _Field(
-                        label: 'Keterangan',
-                        value: transaction.description,
                       ),
                     ],
                   ),

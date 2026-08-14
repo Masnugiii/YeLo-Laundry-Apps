@@ -82,10 +82,13 @@ export function extractNotificationIdFromIndexKey(
   }
 
   const remainder = settingKey.slice(prefix.length);
-  const dotIndex = remainder.indexOf('.');
-
-  if (dotIndex === -1) {
+  if (!remainder) {
     return null;
+  }
+
+  const dotIndex = remainder.indexOf('.');
+  if (dotIndex === -1) {
+    return remainder;
   }
 
   return remainder.slice(dotIndex + 1);

@@ -9,13 +9,25 @@ import { AssignPermissionsDto } from './dto/assign-permissions.dto';
 import { PermissionQueryDto } from './dto/permission-query.dto';
 import { PermissionResponseDto } from './dto/permission-response.dto';
 import { toPermissionResponse } from './permission.mapper';
+import { toRoleResponse } from './role.mapper';
 import { PermissionRepository } from './permission.repository';
+import { RoleResponseDto } from './dto/role-response.dto';
 
 @Injectable()
 export class PermissionService {
   private readonly logger = new Logger(PermissionService.name);
 
   constructor(private readonly permissionRepository: PermissionRepository) {}
+
+  async findAllRoles(): Promise<ApiSuccessResponse<RoleResponseDto[]>> {
+    const roles = await this.permissionRepository.findAllRoles();
+
+    return {
+      success: true,
+      message: 'Roles retrieved successfully',
+      data: roles.map(toRoleResponse),
+    };
+  }
 
   async findAll(
     query: PermissionQueryDto,

@@ -33,6 +33,19 @@ export class OtpRepository {
     });
   }
 
+  findLatestPendingByPhone(phone: string, purpose: OtpPurpose) {
+    return this.prisma.otpCode.findFirst({
+      where: {
+        phone,
+        purpose,
+        status: OtpStatus.pending,
+        expiresAt: { gt: new Date() },
+        deletedAt: null,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   findById(id: string) {
     return this.prisma.otpCode.findFirst({
       where: { id, deletedAt: null },

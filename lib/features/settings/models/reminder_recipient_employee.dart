@@ -1,3 +1,5 @@
+import 'package:yelo_laundry_erp/core/role/role.dart';
+
 enum ReminderRecipientRole {
   owner,
   manager,
@@ -6,7 +8,7 @@ enum ReminderRecipientRole {
 extension ReminderRecipientRoleX on ReminderRecipientRole {
   String get label => switch (this) {
         ReminderRecipientRole.owner => 'Owner',
-        ReminderRecipientRole.manager => 'Manager',
+        ReminderRecipientRole.manager => managerRoleDisplayLabel,
       };
 }
 
@@ -26,37 +28,4 @@ class ReminderRecipientEmployee {
   final String initials;
 }
 
-const dummyReminderRecipientEmployees = <ReminderRecipientEmployee>[
-  ReminderRecipientEmployee(
-    id: 'emp-owner-001',
-    name: 'Nugroho Prasetyo',
-    role: ReminderRecipientRole.owner,
-    whatsapp: '0812-3456-7890',
-    initials: 'NP',
-  ),
-  ReminderRecipientEmployee(
-    id: 'emp-owner-002',
-    name: 'Andi Wijaya',
-    role: ReminderRecipientRole.owner,
-    whatsapp: '0813-4567-8901',
-    initials: 'AW',
-  ),
-  ReminderRecipientEmployee(
-    id: 'emp-owner-003',
-    name: 'Budi Santoso',
-    role: ReminderRecipientRole.owner,
-    whatsapp: '0815-5678-9012',
-    initials: 'BS',
-  ),
-  ReminderRecipientEmployee(
-    id: 'emp-manager-001',
-    name: 'Siti Rahma',
-    role: ReminderRecipientRole.manager,
-    whatsapp: '0817-6789-0123',
-    initials: 'SR',
-  ),
-];
-
-Set<String> defaultSelectedReminderRecipientIds() => {
-      for (final employee in dummyReminderRecipientEmployees) employee.id,
-    };
+Set<String> defaultSelectedReminderRecipientIds() => {};

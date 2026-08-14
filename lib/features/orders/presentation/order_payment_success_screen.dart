@@ -8,6 +8,10 @@ import 'package:yelo_laundry_erp/features/new_order/utils/currency_formatter.dar
 import 'package:yelo_laundry_erp/features/orders/models/order_payment.dart';
 import 'package:yelo_laundry_erp/features/orders/presentation/payment/payment_flow_theme.dart';
 import 'package:yelo_laundry_erp/features/orders/presentation/payment/widgets/payment_summary_section.dart';
+import 'package:yelo_laundry_erp/core/navigation/navigation_utils.dart';
+import 'package:yelo_laundry_erp/features/orders/presentation/widgets/order_whatsapp_receipt_dialog.dart';
+import 'package:yelo_laundry_erp/shared/widgets/erp_app_bar.dart';
+import 'package:yelo_laundry_erp/shared/widgets/flow_exit_scope.dart';
 
 class OrderPaymentSuccessScreen extends StatelessWidget {
   const OrderPaymentSuccessScreen({
@@ -17,11 +21,21 @@ class OrderPaymentSuccessScreen extends StatelessWidget {
 
   final OrderPaymentConfirmation confirmation;
 
+  void _finish(BuildContext context) {
+    exitFlowWithResult(context, confirmation);
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.dashboardBackground,
-      body: SafeArea(
+    return FlowExitScope(
+      onExit: () => _finish(context),
+      child: Scaffold(
+        backgroundColor: AppColors.dashboardBackground,
+        appBar: ErpAppBar(
+          title: 'Pembayaran Berhasil',
+          onBack: () => _finish(context),
+        ),
+        body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(
             AppSpacing.s20,
@@ -124,10 +138,16 @@ class OrderPaymentSuccessScreen extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.s12),
               _ActionButton(
-                label: 'Bagikan Struk ke WhatsApp',
+                label: 'Kirim Bukti Pembayaran via WhatsApp',
                 backgroundColor: const Color(0xFF25D366),
                 textColor: AppColors.onPrimary,
-                onPressed: () => context.push('/laundry-receipt'),
+                onPressed: () => showOrderWhatsappReceiptDialog(
+                  context,
+                  orderId: confirmation.orderId,
+                  title: 'Kirim Bukti Pembayaran via WhatsApp',
+                  subtitle:
+                      'Kirim konfirmasi pembayaran LUNAS ke customer.',
+                ),
               ),
               const SizedBox(height: AppSpacing.s12),
               _ActionButton(
@@ -143,12 +163,13 @@ class OrderPaymentSuccessScreen extends StatelessWidget {
                 backgroundColor: AppColors.surface,
                 textColor: AppColors.primary,
                 borderColor: AppColors.primary,
-                onPressed: () => context.pop(confirmation),
+                onPressed: () => _finish(context),
               ),
             ],
           ),
         ),
       ),
+    ),
     );
   }
 }

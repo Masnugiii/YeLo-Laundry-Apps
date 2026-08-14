@@ -29,8 +29,16 @@ class PreferencesService {
         'phone': session.phone,
         'email': session.email,
         'photoUrl': session.photoUrl,
+        if (session.birthDate != null)
+          'birthDate': session.birthDate!.toIso8601String(),
+        if (session.occupation != null) 'occupation': session.occupation,
+        if (session.gender != null) 'gender': session.gender!.name,
+        if (session.memberSerialNumber != null)
+          'memberSerialNumber': session.memberSerialNumber,
         'loyaltyPoints': session.loyaltyPoints,
         'walletBalance': session.walletBalance,
+        if (session.membershipLevel != null)
+          'membershipLevel': session.membershipLevel!.label,
       }),
     );
   }
@@ -41,15 +49,7 @@ class PreferencesService {
     if (raw == null) return null;
 
     final json = jsonDecode(raw) as Map<String, dynamic>;
-    return CustomerSession(
-      id: json['id'] as String,
-      fullName: json['fullName'] as String,
-      phone: json['phone'] as String,
-      email: json['email'] as String?,
-      photoUrl: json['photoUrl'] as String?,
-      loyaltyPoints: (json['loyaltyPoints'] as num?)?.toInt() ?? 0,
-      walletBalance: (json['walletBalance'] as num?)?.toDouble() ?? 0,
-    );
+    return CustomerSession.fromJson(json);
   }
 
   Future<void> clearCustomerProfile() async {

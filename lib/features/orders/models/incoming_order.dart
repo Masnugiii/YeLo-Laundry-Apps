@@ -197,6 +197,8 @@ class IncomingOrder {
     this.laundryAcceptedAt,
     this.laundryAcceptedBy,
     this.timelineEntries = const [],
+    this.customerId,
+    this.customerWalletBalance,
   });
 
   final String id;
@@ -226,6 +228,8 @@ class IncomingOrder {
   final DateTime? laundryAcceptedAt;
   final String? laundryAcceptedBy;
   final List<OrderTimelineEntry> timelineEntries;
+  final String? customerId;
+  final int? customerWalletBalance;
 
   String get serviceLabel => serviceDisplayName ?? service.label;
 

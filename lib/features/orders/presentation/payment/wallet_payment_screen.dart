@@ -31,18 +31,12 @@ class _WalletPaymentScreenState extends ConsumerState<WalletPaymentScreen> {
   Future<void> _completePayment() async {
     if (_isSubmitting) return;
 
-    final total = widget.session.order.orderValue;
-
     setState(() => _isSubmitting = true);
 
     try {
       final confirmation = await ref
           .read(orderPaymentServiceProvider)
-          .submitPayment(
-            widget.session,
-            walletBalanceBefore: dummyCustomerWalletBalance,
-            walletBalanceAfter: dummyCustomerWalletBalance - total,
-          );
+          .submitPayment(widget.session);
 
       if (!mounted) return;
 
@@ -84,7 +78,6 @@ class _WalletPaymentScreenState extends ConsumerState<WalletPaymentScreen> {
   @override
   Widget build(BuildContext context) {
     final total = widget.session.order.orderValue;
-    final remaining = dummyCustomerWalletBalance - total;
 
     return Scaffold(
       backgroundColor: AppColors.dashboardBackground,
@@ -117,19 +110,18 @@ class _WalletPaymentScreenState extends ConsumerState<WalletPaymentScreen> {
             child: Column(
               children: [
                 PaymentInfoRow(
-                  label: 'Current Wallet Balance',
-                  value: formatRupiah(dummyCustomerWalletBalance),
-                ),
-                const SizedBox(height: AppSpacing.s12),
-                PaymentInfoRow(
                   label: 'Total Payment',
                   value: formatRupiah(total),
-                ),
-                const Divider(height: AppSpacing.s24),
-                PaymentInfoRow(
-                  label: 'Remaining Balance',
-                  value: formatRupiah(remaining),
                   emphasized: true,
+                ),
+                const SizedBox(height: AppSpacing.s12),
+                Text(
+                  'Saldo dompet akan diperbarui setelah pembayaran berhasil dikonfirmasi backend.',
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                    height: 1.4,
+                  ),
                 ),
               ],
             ),

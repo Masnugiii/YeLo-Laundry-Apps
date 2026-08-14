@@ -1,32 +1,38 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
-import 'package:yelo_laundry_erp/features/settings/data/dummy_receipt_customization_settings.dart';
+import 'package:yelo_laundry_erp/core/network/api_exception.dart';
+import 'package:yelo_laundry_erp/core/providers/core_providers.dart';
+import 'package:yelo_laundry_erp/features/settings/models/receipt_settings_config.dart';
 import 'package:yelo_laundry_erp/features/settings/models/receipt_customization_settings.dart';
 import 'package:yelo_laundry_erp/features/settings/presentation/settings_theme.dart';
 import 'package:yelo_laundry_erp/features/settings/presentation/widgets/laundry_profile_source_info_card.dart';
 import 'package:yelo_laundry_erp/features/settings/presentation/widgets/receipt_customization_preview.dart';
 import 'package:yelo_laundry_erp/features/settings/presentation/widgets/receipt_customization_section_card.dart';
+import 'package:yelo_laundry_erp/features/settings/providers/settings_provider.dart';
 
-class ReceiptCustomizationScreen extends StatefulWidget {
+class ReceiptCustomizationScreen extends ConsumerStatefulWidget {
   const ReceiptCustomizationScreen({super.key});
 
   @override
-  State<ReceiptCustomizationScreen> createState() =>
+  ConsumerState<ReceiptCustomizationScreen> createState() =>
       _ReceiptCustomizationScreenState();
 }
 
-class _ReceiptCustomizationScreenState extends State<ReceiptCustomizationScreen> {
-  late ReceiptCustomizationSettings _settings;
+class _ReceiptCustomizationScreenState
+    extends ConsumerState<ReceiptCustomizationScreen> {
+  ReceiptCustomizationSettings _settings = const ReceiptCustomizationSettings();
+  ReceiptSettingsConfig? _receiptConfig;
   late final TextEditingController _noteController;
+  bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
-    _settings = getReceiptCustomizationSettings();
-    _noteController = TextEditingController(text: _settings.receiptNote);
+    _noteController = TextEditingController();
   }
 
   @override
@@ -35,28 +41,81 @@ class _ReceiptCustomizationScreenState extends State<ReceiptCustomizationScreen>
     super.dispose();
   }
 
+  void _applyReceiptConfig(ReceiptSettingsConfig config) {
+    _receiptConfig = config;
+    _noteController.text = config.footerText ?? '';
+    _settings = _settings.copyWith(
+      business: _settings.business.copyWith(showLogo: config.showLogo),
+      showQrCode: config.showQRCode,
+      receiptNote: config.footerText ?? '',
+    );
+  }
+
   void _update(ReceiptCustomizationSettings settings) {
     setState(() => _settings = settings);
   }
 
-  void _onSave() {
-    saveReceiptCustomizationSettings(
-      _settings.copyWith(receiptNote: _noteController.text),
-    );
+  Future<void> _onSave() async {
+    if (_isSaving || !ref.read(isOwnerSettingsProvider)) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        content: Text(
-          'Pengaturan struk berhasil disimpan.',
-          style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w500),
+    setState(() => _isSaving = true);
+
+    try {
+      final updated = await ref.read(settingsRepositoryProvider).updateReceiptSettings(
+            ReceiptSettingsConfig(
+              showLogo: _settings.business.showLogo,
+              showQRCode: _settings.showQrCode,
+              footerText: _noteController.text.trim(),
+              companyName: _receiptConfig?.companyName ?? '',
+              companyPhone: _receiptConfig?.companyPhone,
+              companyAddress: _receiptConfig?.companyAddress,
+              companyLogoUrl: _receiptConfig?.companyLogoUrl,
+            ).toUpdatePayload(
+              showLogo: _settings.business.showLogo,
+              showQRCode: _settings.showQrCode,
+              footerText: _noteController.text.trim(),
+            ),
+          );
+
+      ref.invalidate(receiptSettingsProvider);
+      if (!mounted) return;
+      _applyReceiptConfig(updated);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text(
+            'Pengaturan struk berhasil disimpan.',
+            style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w500),
+          ),
         ),
-      ),
-    );
+      );
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text(error.message),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text('Gagal menyimpan pengaturan struk.'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final canEdit = ref.watch(isOwnerSettingsProvider);
+    final receiptAsync = ref.watch(receiptSettingsProvider);
+
     return Scaffold(
       backgroundColor: AppColors.dashboardBackground,
       appBar: AppBar(
@@ -73,50 +132,67 @@ class _ReceiptCustomizationScreenState extends State<ReceiptCustomizationScreen>
           ),
         ),
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.s20,
-                AppSpacing.s20,
-                AppSpacing.s20,
-                AppSpacing.s32,
-              ),
+      body: receiptAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.s20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                _section1(),
+                Text(
+                  error.toString(),
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(color: AppColors.textSecondary),
+                ),
                 const SizedBox(height: AppSpacing.s16),
-                _section2(),
-                const SizedBox(height: AppSpacing.s16),
-                _section3(),
-                const SizedBox(height: AppSpacing.s16),
-                _section4(),
-                const SizedBox(height: AppSpacing.s16),
-                _section5(),
-                const SizedBox(height: AppSpacing.s16),
-                _section6(),
-                const SizedBox(height: AppSpacing.s16),
-                _section7(),
-                const SizedBox(height: AppSpacing.s16),
-                _section8(),
-                const SizedBox(height: AppSpacing.s16),
-                _section9(),
-                const SizedBox(height: AppSpacing.s16),
-                _section10(),
-                const SizedBox(height: AppSpacing.s16),
-                _section11(),
-                const SizedBox(height: AppSpacing.s16),
-                _section12(),
+                FilledButton(
+                  onPressed: () => ref.invalidate(receiptSettingsProvider),
+                  child: const Text('Coba Lagi'),
+                ),
               ],
             ),
           ),
-          _saveButton(),
-        ],
+        ),
+        data: (config) {
+          if (_receiptConfig?.companyName != config.companyName) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                setState(() => _applyReceiptConfig(config));
+              }
+            });
+          }
+
+          return Column(
+            children: [
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.s20,
+                    AppSpacing.s20,
+                    AppSpacing.s20,
+                    AppSpacing.s32,
+                  ),
+                  children: [
+                    _section1(config),
+                    const SizedBox(height: AppSpacing.s16),
+                    _section8(),
+                    const SizedBox(height: AppSpacing.s16),
+                    _section9(),
+                    const SizedBox(height: AppSpacing.s16),
+                    _section12(config),
+                  ],
+                ),
+              ),
+              if (canEdit) _saveButton(),
+            ],
+          );
+        },
       ),
     );
   }
 
-  Widget _section1() {
+  Widget _section1(ReceiptSettingsConfig config) {
     final b = _settings.business;
     return ReceiptCustomizationSectionCard(
       title: 'Informasi Laundry',
@@ -133,249 +209,33 @@ class _ReceiptCustomizationScreenState extends State<ReceiptCustomizationScreen>
         ReceiptCustomizationCheckbox(
           title: 'Tampilkan Logo Laundry',
           value: b.showLogo,
-          onChanged: (v) => _update(_settings.copyWith(
-            business: b.copyWith(showLogo: v),
-          )),
+          onChanged: canEdit
+              ? (v) => _update(_settings.copyWith(
+                    business: b.copyWith(showLogo: v),
+                  ))
+              : (_) {},
         ),
         ReceiptCustomizationCheckbox(
           title: 'Tampilkan Nama Laundry',
-          value: b.showName,
-          onChanged: (v) => _update(_settings.copyWith(
-            business: b.copyWith(showName: v),
-          )),
+          value: true,
+          onChanged: (_) {},
         ),
         ReceiptCustomizationCheckbox(
           title: 'Tampilkan Alamat Laundry',
-          value: b.showAddress,
-          onChanged: (v) => _update(_settings.copyWith(
-            business: b.copyWith(showAddress: v),
-          )),
+          value: config.companyAddress?.isNotEmpty == true,
+          onChanged: (_) {},
         ),
         ReceiptCustomizationCheckbox(
           title: 'Tampilkan Nomor WhatsApp',
-          value: b.showWhatsapp,
-          onChanged: (v) => _update(_settings.copyWith(
-            business: b.copyWith(showWhatsapp: v),
-          )),
-        ),
-        ReceiptCustomizationCheckbox(
-          title: 'Tampilkan Instagram',
-          value: b.showInstagram,
-          onChanged: (v) => _update(_settings.copyWith(
-            business: b.copyWith(showInstagram: v),
-          )),
-        ),
-        ReceiptCustomizationCheckbox(
-          title: 'Tampilkan Website',
-          value: b.showWebsite,
+          value: config.companyPhone?.isNotEmpty == true,
+          onChanged: (_) {},
           showDivider: false,
-          onChanged: (v) => _update(_settings.copyWith(
-            business: b.copyWith(showWebsite: v),
-          )),
         ),
       ],
     );
   }
 
-  Widget _section2() {
-    final o = _settings.order;
-    return ReceiptCustomizationSectionCard(
-      title: 'Informasi Order',
-      children: [
-        ReceiptCustomizationCheckbox(
-          title: 'Nomor Order',
-          value: o.showOrderNumber,
-          onChanged: (v) => _update(_settings.copyWith(
-            order: o.copyWith(showOrderNumber: v),
-          )),
-        ),
-        ReceiptCustomizationCheckbox(
-          title: 'Nomor Antrian',
-          value: o.showQueueNumber,
-          onChanged: (v) => _update(_settings.copyWith(
-            order: o.copyWith(showQueueNumber: v),
-          )),
-        ),
-        ReceiptCustomizationCheckbox(
-          title: 'Tanggal Order',
-          value: o.showOrderDate,
-          onChanged: (v) => _update(_settings.copyWith(
-            order: o.copyWith(showOrderDate: v),
-          )),
-        ),
-        ReceiptCustomizationCheckbox(
-          title: 'Estimasi Selesai',
-          value: o.showEstimatedFinish,
-          showDivider: false,
-          onChanged: (v) => _update(_settings.copyWith(
-            order: o.copyWith(showEstimatedFinish: v),
-          )),
-        ),
-      ],
-    );
-  }
-
-  Widget _section3() {
-    final c = _settings.customer;
-    return ReceiptCustomizationSectionCard(
-      title: 'Informasi Customer',
-      children: [
-        ReceiptCustomizationCheckbox(
-          title: 'Nama Customer',
-          value: c.showCustomerName,
-          onChanged: (v) => _update(_settings.copyWith(
-            customer: c.copyWith(showCustomerName: v),
-          )),
-        ),
-        ReceiptCustomizationCheckbox(
-          title: 'Nomor HP',
-          value: c.showPhone,
-          showDivider: false,
-          onChanged: (v) => _update(_settings.copyWith(
-            customer: c.copyWith(showPhone: v),
-          )),
-        ),
-      ],
-    );
-  }
-
-  Widget _section4() {
-    final s = _settings.service;
-    return ReceiptCustomizationSectionCard(
-      title: 'Informasi Layanan',
-      children: [
-        ReceiptCustomizationCheckbox(
-          title: 'Nama Layanan',
-          value: s.showServiceName,
-          onChanged: (v) => _update(_settings.copyWith(
-            service: s.copyWith(showServiceName: v),
-          )),
-        ),
-        ReceiptCustomizationCheckbox(
-          title: 'Berat Laundry',
-          value: s.showWeight,
-          onChanged: (v) => _update(_settings.copyWith(
-            service: s.copyWith(showWeight: v),
-          )),
-        ),
-        ReceiptCustomizationCheckbox(
-          title: 'Harga per Layanan',
-          value: s.showPrice,
-          onChanged: (v) => _update(_settings.copyWith(
-            service: s.copyWith(showPrice: v),
-          )),
-        ),
-        ReceiptCustomizationCheckbox(
-          title: 'Subtotal',
-          value: s.showSubtotal,
-          onChanged: (v) => _update(_settings.copyWith(
-            service: s.copyWith(showSubtotal: v),
-          )),
-        ),
-        ReceiptCustomizationCheckbox(
-          title: 'Diskon',
-          value: s.showDiscount,
-          onChanged: (v) => _update(_settings.copyWith(
-            service: s.copyWith(showDiscount: v),
-          )),
-        ),
-        ReceiptCustomizationCheckbox(
-          title: 'Grand Total',
-          value: s.showGrandTotal,
-          showDivider: false,
-          onChanged: (v) => _update(_settings.copyWith(
-            service: s.copyWith(showGrandTotal: v),
-          )),
-        ),
-      ],
-    );
-  }
-
-  Widget _section5() {
-    final p = _settings.payment;
-    return ReceiptCustomizationSectionCard(
-      title: 'Pembayaran',
-      children: [
-        ReceiptCustomizationCheckbox(
-          title: 'Metode Pembayaran',
-          value: p.showPaymentMethod,
-          onChanged: (v) => _update(_settings.copyWith(
-            payment: p.copyWith(showPaymentMethod: v),
-          )),
-        ),
-        ReceiptCustomizationCheckbox(
-          title: 'Status Pembayaran',
-          value: p.showPaymentStatus,
-          showDivider: false,
-          onChanged: (v) => _update(_settings.copyWith(
-            payment: p.copyWith(showPaymentStatus: v),
-          )),
-        ),
-      ],
-    );
-  }
-
-  Widget _section6() {
-    final pd = _settings.pickupDelivery;
-    return ReceiptCustomizationSectionCard(
-      title: 'Pickup & Delivery',
-      children: [
-        ReceiptCustomizationCheckbox(
-          title: 'Pickup',
-          value: pd.showPickup,
-          onChanged: (v) => _update(_settings.copyWith(
-            pickupDelivery: pd.copyWith(showPickup: v),
-          )),
-        ),
-        ReceiptCustomizationCheckbox(
-          title: 'Delivery',
-          value: pd.showDelivery,
-          onChanged: (v) => _update(_settings.copyWith(
-            pickupDelivery: pd.copyWith(showDelivery: v),
-          )),
-        ),
-        ReceiptCustomizationCheckbox(
-          title: 'Jadwal Pickup',
-          value: pd.showPickupSchedule,
-          onChanged: (v) => _update(_settings.copyWith(
-            pickupDelivery: pd.copyWith(showPickupSchedule: v),
-          )),
-        ),
-        ReceiptCustomizationCheckbox(
-          title: 'Jadwal Delivery',
-          value: pd.showDeliverySchedule,
-          showDivider: false,
-          onChanged: (v) => _update(_settings.copyWith(
-            pickupDelivery: pd.copyWith(showDeliverySchedule: v),
-          )),
-        ),
-      ],
-    );
-  }
-
-  Widget _section7() {
-    final e = _settings.employee;
-    return ReceiptCustomizationSectionCard(
-      title: 'Informasi Karyawan',
-      children: [
-        ReceiptCustomizationCheckbox(
-          title: 'Nama Kasir',
-          value: e.showCashierName,
-          onChanged: (v) => _update(_settings.copyWith(
-            employee: e.copyWith(showCashierName: v),
-          )),
-        ),
-        ReceiptCustomizationCheckbox(
-          title: 'PIC Binatu',
-          value: e.showPicBinatu,
-          showDivider: false,
-          onChanged: (v) => _update(_settings.copyWith(
-            employee: e.copyWith(showPicBinatu: v),
-          )),
-        ),
-      ],
-    );
-  }
+  bool get canEdit => ref.read(isOwnerSettingsProvider);
 
   Widget _section8() {
     return ReceiptCustomizationSectionCard(
@@ -387,7 +247,9 @@ class _ReceiptCustomizationScreenState extends State<ReceiptCustomizationScreen>
           title: 'Tampilkan QR Code',
           value: _settings.showQrCode,
           showDivider: false,
-          onChanged: (v) => _update(_settings.copyWith(showQrCode: v)),
+          onChanged: canEdit
+              ? (v) => _update(_settings.copyWith(showQrCode: v))
+              : (_) {},
         ),
       ],
     );
@@ -407,6 +269,7 @@ class _ReceiptCustomizationScreenState extends State<ReceiptCustomizationScreen>
           child: TextFormField(
             controller: _noteController,
             maxLines: 4,
+            readOnly: !canEdit,
             style: GoogleFonts.poppins(fontSize: 14),
             decoration: SettingsTheme.textFieldDecoration.copyWith(
               hintText: 'Masukkan catatan struk...',
@@ -418,86 +281,7 @@ class _ReceiptCustomizationScreenState extends State<ReceiptCustomizationScreen>
     );
   }
 
-  Widget _section10() {
-    return ReceiptCustomizationSectionCard(
-      title: 'Ukuran Kertas',
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.s12,
-            AppSpacing.s4,
-            AppSpacing.s20,
-            AppSpacing.s12,
-          ),
-          child: RadioGroup<ReceiptPaperSize>(
-            groupValue: _settings.paperSize,
-            onChanged: (value) {
-              if (value != null) {
-                _update(_settings.copyWith(paperSize: value));
-              }
-            },
-            child: Column(
-              children: [
-                RadioListTile<ReceiptPaperSize>(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text('58 mm', style: SettingsTheme.tileTitleStyle),
-                  value: ReceiptPaperSize.mm58,
-                ),
-                RadioListTile<ReceiptPaperSize>(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text('80 mm', style: SettingsTheme.tileTitleStyle),
-                  value: ReceiptPaperSize.mm80,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _section11() {
-    return ReceiptCustomizationSectionCard(
-      title: 'Bahasa Struk',
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.s12,
-            AppSpacing.s4,
-            AppSpacing.s20,
-            AppSpacing.s12,
-          ),
-          child: RadioGroup<ReceiptLanguage>(
-            groupValue: _settings.language,
-            onChanged: (value) {
-              if (value != null) {
-                _update(_settings.copyWith(language: value));
-              }
-            },
-            child: Column(
-              children: [
-                RadioListTile<ReceiptLanguage>(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(
-                    'Bahasa Indonesia',
-                    style: SettingsTheme.tileTitleStyle,
-                  ),
-                  value: ReceiptLanguage.indonesia,
-                ),
-                RadioListTile<ReceiptLanguage>(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text('English', style: SettingsTheme.tileTitleStyle),
-                  value: ReceiptLanguage.english,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _section12() {
+  Widget _section12(ReceiptSettingsConfig config) {
     return ReceiptCustomizationSectionCard(
       title: 'Preview Struk',
       children: [
@@ -512,6 +296,7 @@ class _ReceiptCustomizationScreenState extends State<ReceiptCustomizationScreen>
             settings: _settings.copyWith(
               receiptNote: _noteController.text,
             ),
+            receiptConfig: config,
           ),
         ),
       ],
@@ -539,7 +324,7 @@ class _ReceiptCustomizationScreenState extends State<ReceiptCustomizationScreen>
       child: SizedBox(
         width: double.infinity,
         child: FilledButton(
-          onPressed: _onSave,
+          onPressed: _isSaving ? null : _onSave,
           style: FilledButton.styleFrom(
             backgroundColor: AppColors.primary,
             foregroundColor: AppColors.onPrimary,
@@ -548,13 +333,22 @@ class _ReceiptCustomizationScreenState extends State<ReceiptCustomizationScreen>
               borderRadius: BorderRadius.circular(16),
             ),
           ),
-          child: Text(
-            'Simpan Pengaturan',
-            style: GoogleFonts.poppins(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+          child: _isSaving
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.onPrimary,
+                  ),
+                )
+              : Text(
+                  'Simpan Pengaturan',
+                  style: GoogleFonts.poppins(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
         ),
       ),
     );

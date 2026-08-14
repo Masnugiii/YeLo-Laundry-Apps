@@ -113,7 +113,7 @@ export class EmployeeService {
 
     const employee = await this.employeeRepository.create({
       employeeCode: dto.employeeCode,
-      fullName: dto.fullName,
+      fullName: dto.fullName.trim(),
       phone,
       email,
       passwordHash,
@@ -159,7 +159,7 @@ export class EmployeeService {
 
     const employee = await this.employeeRepository.update(id, {
       ...(dto.employeeCode !== undefined && { employeeCode: dto.employeeCode }),
-      ...(dto.fullName !== undefined && { fullName: dto.fullName }),
+      ...(dto.fullName !== undefined && { fullName: dto.fullName.trim() }),
       ...(phone !== undefined && { phone }),
       ...(dto.email !== undefined && { email }),
       ...(dto.position !== undefined && { position: dto.position }),

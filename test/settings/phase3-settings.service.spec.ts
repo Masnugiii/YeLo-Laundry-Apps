@@ -11,11 +11,13 @@ import { AttendanceConfigService } from '../../src/settings/config/attendance-co
 import { BackupSettingsService } from '../../src/settings/config/backup-settings.service';
 import { DocumentRulesService } from '../../src/settings/config/document-rules.service';
 import { NotificationConfigService } from '../../src/settings/config/notification-config.service';
+import { PaymentConfigService } from '../../src/settings/config/payment-config.service';
 import { ConfigAuditService } from '../../src/settings/audit/config-audit.service';
 import { SettingsService } from '../../src/settings/settings.service';
 import { DEFAULT_BACKUP_SETTINGS } from '../../src/settings/types/backup-settings.types';
 import { DEFAULT_DOCUMENT_RULES } from '../../src/settings/types/document-rules.types';
 import { DEFAULT_NOTIFICATION_TOGGLE_SETTINGS } from '../../src/settings/types/notification-settings.types';
+import { DEFAULT_CUSTOMER_PAYMENT_CONFIG } from '../../src/settings/types/payment-settings.types';
 
 describe('SettingsService Phase 3B', () => {
   const adminSettingsService = {
@@ -49,6 +51,17 @@ describe('SettingsService Phase 3B', () => {
     getConfig: jest.fn(),
     updateConfig: jest.fn(),
   };
+  const paymentConfigService = {
+    getConfig: jest.fn(),
+    updateConfig: jest.fn(),
+  };
+  const receiptConfigService = {
+    getConfig: jest.fn(),
+    updateConfig: jest.fn(),
+  };
+  const numberingService = {
+    updateConfiguration: jest.fn(),
+  };
   const prisma = {
     service: { findMany: jest.fn() },
     servicePrice: { findMany: jest.fn() },
@@ -72,6 +85,9 @@ describe('SettingsService Phase 3B', () => {
       documentRulesService as unknown as DocumentRulesService,
       backupSettingsService as unknown as BackupSettingsService,
       notificationConfigService as unknown as NotificationConfigService,
+      paymentConfigService as unknown as PaymentConfigService,
+      receiptConfigService as unknown as import('../../src/settings/config/receipt-config.service').ReceiptConfigService,
+      numberingService as unknown as import('../../src/numbering/numbering.service').NumberingService,
     );
   });
 
@@ -103,6 +119,7 @@ describe('SettingsService Phase 3B', () => {
     });
     backupSettingsService.getSettings.mockResolvedValue(DEFAULT_BACKUP_SETTINGS);
     documentRulesService.getRules.mockResolvedValue(DEFAULT_DOCUMENT_RULES);
+    paymentConfigService.getConfig.mockResolvedValue(DEFAULT_CUSTOMER_PAYMENT_CONFIG);
   }
 
   it('returns unified settings manifest with Phase 3 writable sections', async () => {
@@ -115,8 +132,11 @@ describe('SettingsService Phase 3B', () => {
       'payroll',
       'loyalty',
       'attendance',
+      'payment',
       'notifications',
       'documents',
+      'receipt',
+      'numbering',
       'backup',
     ]);
   });

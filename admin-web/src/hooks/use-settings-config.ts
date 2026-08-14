@@ -6,6 +6,7 @@ import type {
   CompanySettings,
   DocumentRules,
   NotificationSettings,
+  PaymentSettings,
   DeliverySettingsResponse,
   SettingsSectionUpdateResult,
 } from "@/types/settings-config";
@@ -135,5 +136,26 @@ export function useDeliverySettings() {
   return useQuery({
     queryKey: [SETTINGS_CONFIG_KEY, "delivery"],
     queryFn: () => apiGet<DeliverySettingsResponse>("/settings/delivery"),
+  });
+}
+
+export function usePaymentSettings() {
+  return useQuery({
+    queryKey: [SETTINGS_CONFIG_KEY, "payment"],
+    queryFn: () => apiGet<PaymentSettings>("/settings/payment"),
+  });
+}
+
+export function useUpdatePaymentSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: Partial<PaymentSettings>) =>
+      apiPatch<SettingsSectionUpdateResult<PaymentSettings>>(
+        "/settings/payment",
+        input,
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [SETTINGS_CONFIG_KEY, "payment"] });
+    },
   });
 }

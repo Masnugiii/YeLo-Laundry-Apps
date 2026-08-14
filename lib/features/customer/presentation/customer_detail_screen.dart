@@ -6,15 +6,23 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_shadows.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
+import 'package:yelo_laundry_erp/core/role/staff_permissions.dart';
 import 'package:yelo_laundry_erp/features/customer/models/customer_order_history.dart';
 import 'package:yelo_laundry_erp/features/customer/presentation/widgets/customer_fab.dart';
 import 'package:yelo_laundry_erp/features/customer/providers/customer_detail_provider.dart';
 import 'package:yelo_laundry_erp/features/new_order/utils/currency_formatter.dart';
 import 'package:yelo_laundry_erp/features/points/models/loyalty_class.dart';
+import 'package:yelo_laundry_erp/features/points/models/yelo_rewards_models.dart';
 import 'package:yelo_laundry_erp/features/points/presentation/widgets/loyalty_badge.dart';
-import 'package:yelo_laundry_erp/features/points/presentation/widgets/point_rewards_card.dart';
+import 'package:yelo_laundry_erp/features/points/presentation/widgets/yelo_rewards_card.dart';
+import 'package:yelo_laundry_erp/features/points/providers/yelo_rewards_provider.dart';
+import 'package:yelo_laundry_erp/core/providers/core_providers.dart';
+import 'package:yelo_laundry_erp/core/network/api_exception.dart';
+import 'package:yelo_laundry_erp/features/wallet/data/wallet_repository.dart';
 import 'package:yelo_laundry_erp/features/wallet/presentation/widgets/wallet_deduction_bottom_sheet.dart';
 import 'package:yelo_laundry_erp/features/wallet/presentation/widgets/wallet_top_up_bottom_sheet.dart';
+import 'package:yelo_laundry_erp/features/wallet/presentation/widgets/yelo_wallet_card.dart';
+import 'package:yelo_laundry_erp/features/wallet/providers/wallet_providers.dart';
 import 'package:yelo_laundry_erp/shared/widgets/api_state_widgets.dart';
 
 class CustomerDetailScreen extends ConsumerWidget {
@@ -25,6 +33,7 @@ class CustomerDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profileAsync = ref.watch(customerDetailProvider(customerId));
+    final permissions = ref.watch(staffPermissionsProvider);
 
     return profileAsync.when(
       loading: () => Scaffold(
@@ -44,13 +53,22 @@ class CustomerDetailScreen extends ConsumerWidget {
           onRetry: () => ref.invalidate(customerDetailProvider(customerId)),
         ),
       ),
-      data: (profile) => Scaffold(
+      data: (profile) {
+        final rewardsAsync = ref.watch(yeloRewardsSummaryProvider(customerId));
+        final loyaltyClass = rewardsAsync.maybeWhen(
+          data: (summary) => summary.membershipLevelCode != null
+              ? loyaltyClassFromCode(summary.membershipLevelCode)
+              : loyaltyClassFromPoints(summary.lifetimePoints ?? summary.currentPoint),
+          orElse: () => loyaltyClassFromPoints(profile.customer.points),
+        );
+
+        return Scaffold(
         backgroundColor: AppColors.dashboardBackground,
         floatingActionButton: const CustomerFab(),
         floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
         appBar: _buildAppBar(
           context,
-          loyaltyClass: loyaltyClassFromPoints(profile.customer.points),
+          loyaltyClass: loyaltyClass,
         ),
         body: ListView(
           padding: const EdgeInsets.fromLTRB(
@@ -61,7 +79,7 @@ class CustomerDetailScreen extends ConsumerWidget {
           ),
           children: [
             _SectionCard(
-              title: 'Profile',
+              title: 'Informasi Customer',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -87,74 +105,16 @@ class CustomerDetailScreen extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: AppSpacing.s16),
-            _SectionCard(
-              title: 'Dompet Yelo',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    formatRupiah(profile.walletBalance),
-                    style: GoogleFonts.poppins(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.s16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _ActionButton(
-                          label: 'Tambah Saldo',
-                          backgroundColor: AppColors.primary,
-                          textColor: AppColors.onPrimary,
-                          onPressed: () => showWalletTopUpBottomSheet(
-                            context,
-                            currentBalance: profile.walletBalance,
-                            customerId: profile.customer.id,
-                            customerName: profile.customer.name,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: AppSpacing.s8),
-                      Expanded(
-                        child: _ActionButton(
-                          label: 'Kurangi Saldo',
-                          backgroundColor: AppColors.surface,
-                          textColor: AppColors.primary,
-                          borderColor: AppColors.primary,
-                          onPressed: () => showWalletDeductionBottomSheet(
-                            context,
-                            currentBalance: profile.walletBalance,
-                            customerId: profile.customer.id,
-                            customerName: profile.customer.name,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.s8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: _ActionButton(
-                      label: 'Riwayat Deposit',
-                      backgroundColor: AppColors.accent,
-                      textColor: AppColors.primary,
-                      onPressed: () => context.push(
-                        '/wallet-history?customerId=${profile.customer.id}',
-                      ),
-                    ),
-                  ),
-                ],
+            if (permissions.wallet)
+              _CustomerYeloWalletSection(
+                customerId: profile.customer.id,
+                customerName: profile.customer.name,
+                fallbackBalance: profile.walletBalance,
+                canTopUp: permissions.walletTopUp,
+                canDeduct: permissions.walletDeduct,
               ),
-            ),
-            const SizedBox(height: AppSpacing.s16),
-            PointRewardsCard(
-              points: profile.customer.points,
-              onHistoryPressed: () => context.push(
-                '/customer/point-history?customerId=${profile.customer.id}',
-              ),
-            ),
+            if (permissions.wallet) const SizedBox(height: AppSpacing.s16),
+            _CustomerYeloRewardsSection(customerId: profile.customer.id),
             const SizedBox(height: AppSpacing.s16),
             _SectionCard(
               title: 'Customer Statistics',
@@ -200,7 +160,8 @@ class CustomerDetailScreen extends ConsumerWidget {
             ),
           ],
         ),
-      ),
+      );
+      },
     );
   }
 
@@ -326,49 +287,6 @@ class _DetailRow extends StatelessWidget {
   }
 }
 
-class _ActionButton extends StatelessWidget {
-  const _ActionButton({
-    required this.label,
-    required this.backgroundColor,
-    required this.textColor,
-    this.borderColor,
-    this.onPressed,
-    this.fontSize = 13,
-    this.fontWeight = FontWeight.w600,
-  });
-
-  final String label;
-  final Color backgroundColor;
-  final Color textColor;
-  final Color? borderColor;
-  final VoidCallback? onPressed;
-  final double fontSize;
-  final FontWeight fontWeight;
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton(
-      onPressed: onPressed,
-      style: OutlinedButton.styleFrom(
-        backgroundColor: backgroundColor,
-        foregroundColor: textColor,
-        side: BorderSide(color: borderColor ?? backgroundColor, width: 1.5),
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.s12),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      ),
-      child: Text(
-        label,
-        textAlign: TextAlign.center,
-        style: GoogleFonts.poppins(
-          fontSize: fontSize,
-          fontWeight: fontWeight,
-          color: textColor,
-        ),
-      ),
-    );
-  }
-}
-
 class _StatTile extends StatelessWidget {
   const _StatTile({required this.label, required this.value});
 
@@ -486,6 +404,170 @@ class _OrderHistoryTile extends StatelessWidget {
           const SizedBox(height: AppSpacing.s16),
         ],
       ],
+    );
+  }
+}
+
+class _CustomerYeloWalletSection extends ConsumerWidget {
+  const _CustomerYeloWalletSection({
+    required this.customerId,
+    required this.customerName,
+    required this.fallbackBalance,
+    required this.canTopUp,
+    required this.canDeduct,
+  });
+
+  final String customerId;
+  final String customerName;
+  final int fallbackBalance;
+  final bool canTopUp;
+  final bool canDeduct;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final walletAsync = ref.watch(customerWalletProvider(customerId));
+    final transactionsAsync = ref.watch(walletTransactionsProvider(customerId));
+
+    return walletAsync.when(
+      loading: () => const Padding(
+        padding: EdgeInsets.symmetric(vertical: AppSpacing.s16),
+        child: Center(child: CircularProgressIndicator()),
+      ),
+      error: (error, _) => ApiErrorView(
+        message: messageFromError(error),
+        onRetry: () => ref.invalidate(customerWalletProvider(customerId)),
+      ),
+      data: (wallet) {
+        final currentBalance = wallet.balance.round();
+        return YeloWalletCard(
+          wallet: wallet.balance == 0 && fallbackBalance > 0
+              ? CustomerWalletSummary(
+                  walletId: wallet.walletId,
+                  customerId: wallet.customerId,
+                  balance: fallbackBalance.toDouble(),
+                  currency: wallet.currency,
+                  isActive: wallet.isActive,
+                  totalTopup: wallet.totalTopup,
+                  totalSpending: wallet.totalSpending,
+                )
+              : wallet,
+          transactions: transactionsAsync.maybeWhen(
+            data: (items) => items,
+            orElse: () => const [],
+          ),
+          transactionsLoading: transactionsAsync.isLoading,
+          onHistoryPressed: () => context.push(
+            '/wallet-history?customerId=$customerId',
+          ),
+          onTopUpPressed: canTopUp
+              ? () => showWalletTopUpBottomSheet(
+                    context,
+                    currentBalance: currentBalance,
+                    customerId: customerId,
+                    customerName: customerName,
+                  )
+              : null,
+          onDeductPressed: canDeduct
+              ? () => showWalletDeductionBottomSheet(
+                    context,
+                    currentBalance: currentBalance,
+                    customerId: customerId,
+                    customerName: customerName,
+                  )
+              : null,
+        );
+      },
+    );
+  }
+}
+
+class _CustomerYeloRewardsSection extends ConsumerStatefulWidget {
+  const _CustomerYeloRewardsSection({required this.customerId});
+
+  final String customerId;
+
+  @override
+  ConsumerState<_CustomerYeloRewardsSection> createState() =>
+      _CustomerYeloRewardsSectionState();
+}
+
+class _CustomerYeloRewardsSectionState
+    extends ConsumerState<_CustomerYeloRewardsSection> {
+  String? _fulfillingId;
+
+  Future<void> _fulfill(RewardRedemptionSummary redemption) async {
+    setState(() => _fulfillingId = redemption.id);
+    try {
+      await ref
+          .read(loyaltyRepositoryProvider)
+          .fulfillPhysicalRedemption(redemption.id);
+      ref.invalidate(yeloRewardsSummaryProvider(widget.customerId));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Reward fisik ditandai selesai.',
+            style: GoogleFonts.poppins(),
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.message, style: GoogleFonts.poppins()),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppColors.error,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _fulfillingId = null);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rewardsAsync =
+        ref.watch(yeloRewardsSummaryProvider(widget.customerId));
+
+    return rewardsAsync.when(
+      loading: () => const Padding(
+        padding: EdgeInsets.symmetric(vertical: AppSpacing.s16),
+        child: Center(child: CircularProgressIndicator()),
+      ),
+      error: (error, _) => ApiErrorView(
+        message: messageFromError(error),
+        onRetry: () =>
+            ref.invalidate(yeloRewardsSummaryProvider(widget.customerId)),
+      ),
+      data: (summary) {
+        final catalogAsync =
+            ref.watch(rewardCatalogProvider(widget.customerId));
+        return YeloRewardsCard(
+          summary: summary,
+          catalog: catalogAsync.maybeWhen(
+            data: (items) => items,
+            orElse: () => const [],
+          ),
+          catalogLoading: catalogAsync.isLoading,
+          catalogError: catalogAsync.hasError
+              ? messageFromError(catalogAsync.error!)
+              : null,
+          onRetryCatalog: () =>
+              ref.invalidate(rewardCatalogProvider(widget.customerId)),
+          isFulfillingId: _fulfillingId,
+          onPointHistoryPressed: () => context.push(
+            '/customer/point-history?customerId=${widget.customerId}',
+          ),
+          onRewardHistoryPressed: () => context.push(
+            '/customer/reward-history?customerId=${widget.customerId}',
+          ),
+          onFulfillPressed: _fulfill,
+        );
+      },
     );
   }
 }

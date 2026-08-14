@@ -15,7 +15,7 @@ class PickupRepository {
       '/customer-app/pickup-requests',
       data: {
         'orderId': orderId,
-        if (pickupAddressId != null) 'pickupAddressId': pickupAddressId,
+        'pickupAddressId': ?pickupAddressId,
         if (scheduledPickupAt != null)
           'scheduledPickupAt': scheduledPickupAt.toIso8601String(),
         if (notes != null && notes.isNotEmpty) 'notes': notes,

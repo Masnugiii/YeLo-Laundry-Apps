@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:yelo_laundry_erp/features/new_order/utils/currency_formatter.dart';
 import 'package:yelo_laundry_erp/features/receipt/presentation/receipt_theme.dart';
+import 'package:yelo_laundry_erp/features/receipt/presentation/widgets/company_receipt_header.dart';
 import 'package:yelo_laundry_erp/features/receipt/presentation/widgets/receipt_divider.dart';
 import 'package:yelo_laundry_erp/features/receipt/presentation/widgets/receipt_info_row.dart';
-import 'package:yelo_laundry_erp/features/settings/data/dummy_laundry_profile.dart';
+import 'package:yelo_laundry_erp/features/settings/providers/settings_provider.dart';
 import 'package:yelo_laundry_erp/features/wallet/models/wallet_top_up_receipt.dart';
 
-class WalletTopUpReceiptContent extends StatelessWidget {
+class WalletTopUpReceiptContent extends ConsumerWidget {
   const WalletTopUpReceiptContent({
     super.key,
     required this.receipt,
@@ -18,11 +20,14 @@ class WalletTopUpReceiptContent extends StatelessWidget {
   final ReceiptLayoutConfig config;
 
   @override
-  Widget build(BuildContext context) {
-    final profile = getLaundryProfile();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final receiptSettings = ref.watch(receiptSettingsProvider).value;
     final base = config.baseFontSize;
     final title = config.titleFontSize;
     final spacing = config.sectionSpacing;
+    final footerNote = receiptSettings?.footerText?.trim().isNotEmpty == true
+        ? receiptSettings!.footerText!
+        : receipt.footerNote;
 
     return Container(
       width: config.width,
@@ -34,37 +39,12 @@ class WalletTopUpReceiptContent extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Center(
-            child: Image.asset(
-              profile.logoAsset,
-              height: config.logoHeight,
-              fit: BoxFit.contain,
-            ),
-          ),
-          SizedBox(height: spacing),
-          const ReceiptDivider(),
-          Center(
-            child: Text(
-              profile.name,
-              style: ReceiptTheme.titleText(title),
-              textAlign: TextAlign.center,
-            ),
-          ),
-          SizedBox(height: 4),
-          Center(
-            child: Text(
-              profile.fullAddress,
-              textAlign: TextAlign.center,
-              style: ReceiptTheme.centerText(base),
-            ),
-          ),
-          SizedBox(height: 4),
-          Center(
-            child: Text(
-              'WA : ${profile.whatsapp}',
-              textAlign: TextAlign.center,
-              style: ReceiptTheme.centerText(base),
-            ),
+          CompanyReceiptHeader(
+            config: receiptSettings,
+            logoHeight: config.logoHeight,
+            titleFontSize: title,
+            baseFontSize: base,
+            spacing: spacing,
           ),
           SizedBox(height: spacing),
           const ReceiptDivider(),
@@ -147,7 +127,7 @@ class WalletTopUpReceiptContent extends StatelessWidget {
           SizedBox(height: spacing),
           const ReceiptDivider(),
           Text(
-            receipt.footerNote,
+            footerNote,
             textAlign: TextAlign.center,
             style: ReceiptTheme.baseText(base),
           ),

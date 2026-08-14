@@ -16,6 +16,8 @@ import 'package:yelo_laundry_erp/features/customer_service/data/customer_service
 import 'package:yelo_laundry_erp/features/notifications/data/notification_repository.dart';
 import 'package:yelo_laundry_erp/features/orders/data/order_repository.dart';
 import 'package:yelo_laundry_erp/features/pickup_delivery/data/pickup_delivery_repository.dart';
+import 'package:yelo_laundry_erp/features/points/data/loyalty_repository.dart';
+import 'package:yelo_laundry_erp/features/reports/data/reports_repository.dart';
 import 'package:yelo_laundry_erp/features/settings/data/settings_repository.dart';
 import 'package:yelo_laundry_erp/features/wallet/data/wallet_repository.dart';
 
@@ -105,4 +107,12 @@ final settingsRepositoryProvider = Provider<SettingsRepository>((ref) {
 
 final walletRepositoryProvider = Provider<WalletRepository>((ref) {
   return WalletRepository(ref.watch(apiClientProvider));
+});
+
+final loyaltyRepositoryProvider = Provider<LoyaltyRepository>((ref) {
+  return LoyaltyRepository(ref.watch(apiClientProvider));
+});
+
+final reportsRepositoryProvider = Provider<ReportsRepository>((ref) {
+  return ReportsRepository(ref.watch(apiClientProvider));
 });

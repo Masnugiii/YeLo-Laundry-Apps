@@ -78,8 +78,8 @@ class FinanceRepository {
       '/finance/summary',
       queryParameters: {
         'period': period,
-        if (dateFrom != null) 'dateFrom': dateFrom,
-        if (dateTo != null) 'dateTo': dateTo,
+        'dateFrom': ?dateFrom,
+        'dateTo': ?dateTo,
       },
       parser: (json) => json as Map<String, dynamic>,
     );
@@ -94,8 +94,8 @@ class FinanceRepository {
       '/finance/payment-history',
       queryParameters: {
         'period': period,
-        if (dateFrom != null) 'dateFrom': dateFrom,
-        if (dateTo != null) 'dateTo': dateTo,
+        'dateFrom': ?dateFrom,
+        'dateTo': ?dateTo,
       },
       parser: (json) => json as Map<String, dynamic>,
     );

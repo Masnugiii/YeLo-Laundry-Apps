@@ -9,6 +9,7 @@ import 'package:yelo_laundry_erp/core/utils/debouncer.dart';
 import 'package:yelo_laundry_erp/features/customer/providers/customer_list_provider.dart';
 import 'package:yelo_laundry_erp/features/customer/presentation/widgets/customer_card.dart';
 import 'package:yelo_laundry_erp/features/customer/presentation/widgets/customer_fab.dart';
+import 'package:yelo_laundry_erp/features/dashboard/presentation/widgets/back_to_dashboard_link.dart';
 import 'package:yelo_laundry_erp/shared/widgets/api_state_widgets.dart';
 import 'package:yelo_laundry_erp/shared/widgets/selectable_chip.dart';
 
@@ -16,9 +17,11 @@ class CustomersScreen extends ConsumerStatefulWidget {
   const CustomersScreen({
     super.key,
     this.showBackButton = true,
+    this.showBackToDashboard = false,
   });
 
   final bool showBackButton;
+  final bool showBackToDashboard;
 
   @override
   ConsumerState<CustomersScreen> createState() => _CustomersScreenState();
@@ -71,7 +74,11 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.onPrimary,
         elevation: 0,
-        automaticallyImplyLeading: widget.showBackButton,
+        automaticallyImplyLeading:
+            widget.showBackButton && !widget.showBackToDashboard,
+        leading: widget.showBackToDashboard
+            ? const DashboardAppBarBackButton()
+            : null,
         iconTheme: const IconThemeData(color: AppColors.onPrimary),
         actionsIconTheme: const IconThemeData(color: AppColors.onPrimary),
         title: Text(
@@ -122,7 +129,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s20),
               scrollDirection: Axis.horizontal,
               itemCount: _filterLabels.length,
-              separatorBuilder: (_, __) => const SizedBox(width: AppSpacing.s8),
+              separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.s8),
               itemBuilder: (context, index) {
                 return SelectableChip(
                   label: _filterLabels[index],
@@ -168,7 +175,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                       ),
                       itemCount:
                           customers.length + (state.isLoadingMore ? 1 : 0),
-                      separatorBuilder: (_, __) =>
+                      separatorBuilder: (_, _) =>
                           const SizedBox(height: AppSpacing.s12),
                       itemBuilder: (context, index) {
                         if (index >= customers.length) {

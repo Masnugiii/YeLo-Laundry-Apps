@@ -46,7 +46,7 @@ class WalletDeductionReceipt {
       deductionAmount: confirmation.deductionAmount,
       balanceAfter: confirmation.finalBalance,
       reason: confirmation.deductionReason,
-      relatedOrder: relatedOrder ?? 'YL-004288',
+      relatedOrder: relatedOrder,
       cashierName: confirmation.adminName,
     );
   }

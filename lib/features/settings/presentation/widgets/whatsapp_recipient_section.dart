@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
+import 'package:yelo_laundry_erp/core/role/role.dart';
 import 'package:yelo_laundry_erp/features/settings/models/settings_models.dart';
 import 'package:yelo_laundry_erp/features/settings/presentation/settings_theme.dart';
 
@@ -80,7 +81,10 @@ class _RecipientRow extends StatelessWidget {
       children: [
         CheckboxListTile(
           contentPadding: EdgeInsets.zero,
-          title: Text(recipient.role, style: SettingsTheme.tileTitleStyle),
+          title: Text(
+            staffRoleKeyDisplayLabel(recipient.role),
+            style: SettingsTheme.tileTitleStyle,
+          ),
           subtitle: Padding(
             padding: const EdgeInsets.only(top: AppSpacing.s4),
             child: Text(

@@ -1,13 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiGet, apiPatch, apiPost } from "@/lib/api";
+import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api";
 import type { Paginated } from "@/types/api";
 import type {
+  CreateRewardCatalogInput,
   CustomerLoyalty,
   LoyaltySettings,
   LoyaltyVoucher,
   MembershipSummary,
+  RewardCatalogItem,
   RewardHistoryItem,
   RewardSummary,
+  UpdateRewardCatalogInput,
   VoucherListParams,
   WalletDashboard,
   WalletHistoryParams,
@@ -151,10 +154,27 @@ export function useCreateVoucher() {
       code: string;
       name: string;
       discountType: "PERCENTAGE" | "FIXED";
-      discountValue: number;
+      discountValue?: number;
+      discountPercent?: number;
       startDate: string;
       endDate: string;
     }) => apiPost<LoyaltyVoucher>("/voucher", input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [LOYALTY_QUERY_KEY, "vouchers"] });
+    },
+  });
+}
+
+export function useUpdateVoucher() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (params: {
+      id: string;
+      input: Partial<LoyaltyVoucher> & {
+        discountPercent?: number;
+        discountType?: "PERCENTAGE" | "FIXED";
+      };
+    }) => apiPatch<LoyaltyVoucher>(`/voucher/${params.id}`, params.input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [LOYALTY_QUERY_KEY, "vouchers"] });
     },
@@ -171,6 +191,57 @@ export function useManualBonus() {
     }) => apiPost("/reward/bonus", input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [LOYALTY_QUERY_KEY] });
+    },
+  });
+}
+
+export function useRewardCatalog(includeInactive = true) {
+  return useQuery({
+    queryKey: [LOYALTY_QUERY_KEY, "reward-catalog", includeInactive],
+    queryFn: () =>
+      apiGet<RewardCatalogItem[]>("/loyalty/rewards/catalog", {
+        includeInactive: includeInactive ? "true" : "false",
+      }),
+  });
+}
+
+export function useCreateRewardCatalogItem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateRewardCatalogInput) =>
+      apiPost<RewardCatalogItem>("/loyalty/rewards/catalog", input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: [LOYALTY_QUERY_KEY, "reward-catalog"],
+      });
+    },
+  });
+}
+
+export function useUpdateRewardCatalogItem(itemId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateRewardCatalogInput) =>
+      apiPatch<RewardCatalogItem>(`/loyalty/rewards/catalog/${itemId}`, input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: [LOYALTY_QUERY_KEY, "reward-catalog"],
+      });
+    },
+  });
+}
+
+export function useDeleteRewardCatalogItem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (itemId: string) =>
+      apiDelete<{ id: string; deleted: boolean }>(
+        `/loyalty/rewards/catalog/${itemId}`,
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: [LOYALTY_QUERY_KEY, "reward-catalog"],
+      });
     },
   });
 }

@@ -9,6 +9,7 @@ import { MasterDataAuditService } from '../master-data/audit/master-data-audit.s
 import { UpdateNumberingSequenceDto } from './numbering.dto';
 import {
   formatDailyNumber,
+  formatOrderDate,
   formatSequentialNumber,
   isNumberingType,
   NumberingSequenceConfig,
@@ -120,6 +121,14 @@ export class NumberingService {
           counter = 0;
         }
 
+        counter = await this.syncDailyCounter(
+          client,
+          type,
+          config.prefix,
+          date,
+          counter,
+        );
+
         counter += 1;
 
         await client.$executeRaw`
@@ -153,6 +162,73 @@ export class NumberingService {
     }
 
     return this.prisma.$transaction((client) => execute(client));
+  }
+
+  private async syncDailyCounter(
+    client: Prisma.TransactionClient,
+    type: NumberingType,
+    prefix: string,
+    date: Date,
+    counter: number,
+  ): Promise<number> {
+    const dayPrefix = `${prefix}-${formatOrderDate(date)}-`;
+
+    if (type === 'ORD') {
+      const latest = await client.order.findFirst({
+        where: { invoiceNumber: { startsWith: dayPrefix } },
+        orderBy: { invoiceNumber: 'desc' },
+        select: { invoiceNumber: true },
+      });
+
+      return this.maxCounterFromReference(latest?.invoiceNumber, dayPrefix, counter);
+    }
+
+    if (type === 'PAY') {
+      const latest = await client.payment.findFirst({
+        where: { referenceNumber: { startsWith: dayPrefix } },
+        orderBy: { referenceNumber: 'desc' },
+        select: { referenceNumber: true },
+      });
+
+      return this.maxCounterFromReference(latest?.referenceNumber, dayPrefix, counter);
+    }
+
+    if (type === 'INV') {
+      const latest = await client.systemSetting.findFirst({
+        where: {
+          settingKey: { startsWith: 'invoice:' },
+          settingValue: { contains: dayPrefix },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { settingValue: true },
+      });
+
+      const match = latest?.settingValue?.match(
+        new RegExp(`${dayPrefix.replace(/-/g, '\\-')}(\\d+)`),
+      );
+      const parsed = match ? Number.parseInt(match[1], 10) : null;
+
+      return parsed !== null && Number.isFinite(parsed)
+        ? Math.max(counter, parsed)
+        : counter;
+    }
+
+    return counter;
+  }
+
+  private maxCounterFromReference(
+    reference: string | null | undefined,
+    dayPrefix: string,
+    counter: number,
+  ): number {
+    if (!reference?.startsWith(dayPrefix)) {
+      return counter;
+    }
+
+    const suffix = reference.slice(dayPrefix.length);
+    const parsed = Number.parseInt(suffix, 10);
+
+    return Number.isFinite(parsed) ? Math.max(counter, parsed) : counter;
   }
 
   private toConfig(row: {

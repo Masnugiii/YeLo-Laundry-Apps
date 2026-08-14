@@ -4,7 +4,6 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
-import 'package:yelo_laundry_erp/features/orders/data/dummy_unpaid_orders.dart';
 import 'package:yelo_laundry_erp/features/orders/data/order_view_mappers.dart';
 import 'package:yelo_laundry_erp/features/orders/models/unpaid_order.dart';
 import 'package:yelo_laundry_erp/features/orders/presentation/widgets/unpaid_order_card.dart';
@@ -128,7 +127,7 @@ class _UnpaidOrdersScreenState extends ConsumerState<UnpaidOrdersScreen> {
         elevation: 0,
         iconTheme: const IconThemeData(color: AppColors.onPrimary),
         title: Text(
-          'Belum Dibayar',
+          'Belum Bayar',
           style: GoogleFonts.poppins(
             fontSize: 22,
             fontWeight: FontWeight.w700,

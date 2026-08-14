@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
@@ -7,9 +6,8 @@ import 'package:yelo_laundry_erp/app/theme/app_shadows.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
 import 'package:yelo_laundry_erp/features/new_order/utils/currency_formatter.dart';
 import 'package:yelo_laundry_erp/features/orders/models/incoming_order.dart';
-import 'package:yelo_laundry_erp/features/orders/models/order_payment.dart';
 import 'package:yelo_laundry_erp/features/orders/presentation/widgets/incoming_order_status_badge.dart';
-import 'package:yelo_laundry_erp/features/orders/presentation/widgets/order_payment_bottom_sheet.dart';
+import 'package:yelo_laundry_erp/features/orders/utils/order_payment_flow_launcher.dart';
 import 'package:yelo_laundry_erp/features/orders/presentation/widgets/order_pic_assignment.dart';
 import 'package:yelo_laundry_erp/features/orders/presentation/widgets/order_workflow_timeline.dart';
 import 'package:yelo_laundry_erp/features/orders/presentation/widgets/update_order_status_bottom_sheet.dart';
@@ -59,17 +57,10 @@ class _IncomingOrderCardState extends State<IncomingOrderCard> {
         status: incomingOrderStatusForStep(selectedStep),
       );
 
-      final session = await showOrderPaymentBottomSheet(
+      final confirmation = await launchOrderPaymentFlow(
         context,
         order: pendingOrder,
         yeloWalletEnabled: initialAppSettings.yeloWalletEnabled,
-      );
-
-      if (!mounted || session == null) return;
-
-      final confirmation = await context.push<OrderPaymentConfirmation>(
-        '/order-payment/review',
-        extra: session,
       );
 
       if (!mounted || confirmation == null) return;

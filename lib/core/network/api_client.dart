@@ -8,9 +8,9 @@ import 'package:yelo_laundry_erp/core/storage/secure_storage_service.dart';
 
 class ApiClient {
   ApiClient({
-    required SecureStorageService secureStorage,
+    required this._secureStorage,
     UnauthorizedHandler? onUnauthorized,
-  }) : _secureStorage = secureStorage {
+  }) {
     _dio = Dio(
       BaseOptions(
         baseUrl: AppConfig.apiBaseUrl,

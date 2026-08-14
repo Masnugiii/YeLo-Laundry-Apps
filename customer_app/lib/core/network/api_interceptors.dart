@@ -1,23 +1,65 @@
 import 'package:dio/dio.dart';
 
+import 'package:yelo_laundry_customer/core/auth/auth_debug_log.dart';
+import 'package:yelo_laundry_customer/core/auth/auth_session_controller.dart';
 import 'package:yelo_laundry_customer/core/network/api_exception.dart';
 import 'package:yelo_laundry_customer/core/storage/secure_storage_service.dart';
 
-typedef UnauthorizedHandler = Future<void> Function();
+typedef UnauthorizedHandler = Future<void> Function(int requestEpoch);
+
+const _authRetriedKey = 'authRetried';
+const _authEpochKey = 'authEpoch';
+
+bool isAuthLogoutRequest(RequestOptions options) {
+  return options.method.toUpperCase() == 'POST' &&
+      (options.path == '/auth/logout' || options.path.endsWith('/auth/logout'));
+}
+
+bool isAuthRefreshRequest(RequestOptions options) {
+  return options.method.toUpperCase() == 'POST' &&
+      (options.path == '/auth/refresh' || options.path.endsWith('/auth/refresh'));
+}
+
+class TokenRefreshResult {
+  const TokenRefreshResult({
+    required this.accessToken,
+    this.refreshToken,
+  });
+
+  final String accessToken;
+  final String? refreshToken;
+}
+
+TokenRefreshResult? parseTokenRefreshResponse(Map<String, dynamic>? body) {
+  if (body == null) return null;
+
+  final data = body['data'];
+  if (data is! Map<String, dynamic>) return null;
+
+  final accessToken = data['accessToken'] as String?;
+  if (accessToken == null || accessToken.isEmpty) return null;
+
+  return TokenRefreshResult(
+    accessToken: accessToken,
+    refreshToken: data['refreshToken'] as String?,
+  );
+}
 
 class TokenInterceptor extends Interceptor {
   TokenInterceptor({
-    required SecureStorageService secureStorage,
-    required Dio refreshDio,
+    required this._secureStorage,
+    required this._refreshDio,
+    this._authSession,
     this.onUnauthorized,
-  })  : _secureStorage = secureStorage,
-        _refreshDio = refreshDio;
+  });
 
   final SecureStorageService _secureStorage;
   final Dio _refreshDio;
+  final AuthSessionController? _authSession;
   final UnauthorizedHandler? onUnauthorized;
 
   bool _isRefreshing = false;
+  Future<String>? _ongoingRefresh;
   final List<({RequestOptions options, ErrorInterceptorHandler handler})>
       _pendingRequests = [];
 
@@ -26,9 +68,22 @@ class TokenInterceptor extends Interceptor {
     RequestOptions options,
     RequestInterceptorHandler handler,
   ) async {
-    final token = await _secureStorage.getAccessToken();
-    if (token != null && token.isNotEmpty) {
-      options.headers['Authorization'] = 'Bearer $token';
+    if (_authSession != null) {
+      options.extra[_authEpochKey] = _authSession.epoch;
+    }
+
+    final accessToken = await _secureStorage.getAccessToken();
+    final refreshToken = await _secureStorage.getRefreshToken();
+
+    authDebugLog(
+      'access token ${accessToken != null && accessToken.isNotEmpty ? 'present' : 'missing'}',
+    );
+    authDebugLog(
+      'refresh token ${refreshToken != null && refreshToken.isNotEmpty ? 'present' : 'missing'}',
+    );
+
+    if (accessToken != null && accessToken.isNotEmpty) {
+      options.headers['Authorization'] = 'Bearer $accessToken';
     }
     handler.next(options);
   }
@@ -43,9 +98,44 @@ class TokenInterceptor extends Interceptor {
       return;
     }
 
+    if (_isStaleAuthRequest(err.requestOptions)) {
+      authDebugLog('401 from stale auth epoch ignored');
+      handler.next(err);
+      return;
+    }
+
+    if (isAuthLogoutRequest(err.requestOptions)) {
+      handler.next(err);
+      return;
+    }
+
+    if (isAuthRefreshRequest(err.requestOptions)) {
+      authDebugLog('refresh failed → logout');
+      await _rejectPendingRequests(err);
+      if (!_isStaleAuthRequest(err.requestOptions)) {
+        await _triggerUnauthorized(err.requestOptions);
+      }
+      handler.next(err);
+      return;
+    }
+
+    if (err.requestOptions.extra[_authRetriedKey] == true) {
+      authDebugLog('request already retried after refresh → logout');
+      if (!_isStaleAuthRequest(err.requestOptions)) {
+        await _triggerUnauthorized(err.requestOptions);
+      }
+      handler.next(err);
+      return;
+    }
+
+    authDebugLog('access token expired/401');
+
     final refreshToken = await _secureStorage.getRefreshToken();
     if (refreshToken == null || refreshToken.isEmpty) {
-      await onUnauthorized?.call();
+      authDebugLog('refresh token missing → logout');
+      if (!_isStaleAuthRequest(err.requestOptions)) {
+        await _triggerUnauthorized(err.requestOptions);
+      }
       handler.next(err);
       return;
     }
@@ -56,47 +146,113 @@ class TokenInterceptor extends Interceptor {
     }
 
     _isRefreshing = true;
+    authDebugLog('refresh started');
 
     try {
-      final response = await _refreshDio.post<Map<String, dynamic>>(
-        '/auth/refresh',
-        data: {'refreshToken': refreshToken},
-      );
-
-      final data = response.data?['data'] as Map<String, dynamic>?;
-      final newAccessToken = data?['accessToken'] as String?;
-      final newRefreshToken = data?['refreshToken'] as String?;
-
-      if (newAccessToken == null) {
-        await onUnauthorized?.call();
-        handler.next(err);
-        return;
-      }
-
-      await _secureStorage.saveTokens(
-        accessToken: newAccessToken,
-        refreshToken: newRefreshToken,
-      );
+      final newAccessToken = await _refreshAccessToken(refreshToken);
 
       final retryResponse = await _retryRequest(
         err.requestOptions,
         newAccessToken,
       );
+      authDebugLog('retry original request');
       handler.resolve(retryResponse);
 
-      for (final pending in _pendingRequests) {
-        final pendingResponse = await _retryRequest(
-          pending.options,
-          newAccessToken,
-        );
-        pending.handler.resolve(pendingResponse);
-      }
+      final pending = List.of(_pendingRequests);
       _pendingRequests.clear();
-    } catch (_) {
-      await onUnauthorized?.call();
+      for (final request in pending) {
+        try {
+          final pendingResponse = await _retryRequest(
+            request.options,
+            newAccessToken,
+          );
+          request.handler.resolve(pendingResponse);
+        } on DioException catch (pendingError) {
+          request.handler.next(pendingError);
+        }
+      }
+    } catch (error) {
+      if (error is DioException && _isTransientError(error)) {
+        authDebugLog('refresh transient error → no logout');
+        await _rejectPendingRequests(err);
+        handler.next(err);
+        return;
+      }
+
+      authDebugLog('refresh failed → logout');
+      await _rejectPendingRequests(err);
+      if (!_isStaleAuthRequest(err.requestOptions)) {
+        await _triggerUnauthorized(err.requestOptions);
+      }
       handler.next(err);
     } finally {
       _isRefreshing = false;
+    }
+  }
+
+  bool _isStaleAuthRequest(RequestOptions options) {
+    final session = _authSession;
+    if (session == null) return false;
+    return _requestEpoch(options) != session.epoch;
+  }
+
+  bool _isTransientError(DioException error) {
+    return error.type == DioExceptionType.connectionTimeout ||
+        error.type == DioExceptionType.receiveTimeout ||
+        error.type == DioExceptionType.sendTimeout ||
+        error.type == DioExceptionType.connectionError ||
+        (error.response?.statusCode ?? 0) >= 500;
+  }
+
+  int _requestEpoch(RequestOptions options) {
+    return options.extra[_authEpochKey] as int? ?? _authSession?.epoch ?? 0;
+  }
+
+  Future<void> _triggerUnauthorized(RequestOptions options) async {
+    await onUnauthorized?.call(_requestEpoch(options));
+  }
+
+  Future<String> _refreshAccessToken(String refreshToken) async {
+    if (_ongoingRefresh != null) {
+      return _ongoingRefresh!;
+    }
+
+    final refreshFuture = _performRefresh(refreshToken);
+    _ongoingRefresh = refreshFuture;
+    try {
+      return await refreshFuture;
+    } finally {
+      _ongoingRefresh = null;
+    }
+  }
+
+  Future<String> _performRefresh(String refreshToken) async {
+    final response = await _refreshDio.post<Map<String, dynamic>>(
+      '/auth/refresh',
+      data: {'refreshToken': refreshToken},
+    );
+
+    final refreshResult = parseTokenRefreshResponse(response.data);
+    if (refreshResult == null) {
+      throw DioException(
+        requestOptions: RequestOptions(path: '/auth/refresh', method: 'POST'),
+        message: 'Invalid refresh response',
+      );
+    }
+
+    await _secureStorage.saveTokens(
+      accessToken: refreshResult.accessToken,
+      refreshToken: refreshResult.refreshToken,
+    );
+    authDebugLog('refresh success');
+    return refreshResult.accessToken;
+  }
+
+  Future<void> _rejectPendingRequests(DioException err) async {
+    final pending = List.of(_pendingRequests);
+    _pendingRequests.clear();
+    for (final request in pending) {
+      request.handler.next(err);
     }
   }
 
@@ -109,6 +265,10 @@ class TokenInterceptor extends Interceptor {
       headers: {
         ...requestOptions.headers,
         'Authorization': 'Bearer $accessToken',
+      },
+      extra: {
+        ...requestOptions.extra,
+        _authRetriedKey: true,
       },
     );
 

@@ -10,6 +10,8 @@ class PreferencesService {
   static const _profileKey = 'user_profile';
   static const _themeKey = 'theme_mode';
   static const _languageKey = 'language_code';
+  static const _receiptPrinterKey = 'receipt_printer_name';
+  static const _receiptPaperSizeKey = 'receipt_paper_size';
 
   final SharedPreferences _prefs;
 
@@ -41,4 +43,14 @@ class PreferencesService {
       _prefs.setString(_languageKey, code);
 
   String? readLanguageCode() => _prefs.getString(_languageKey);
+
+  Future<void> saveReceiptPrinterName(String name) =>
+      _prefs.setString(_receiptPrinterKey, name);
+
+  String? readReceiptPrinterName() => _prefs.getString(_receiptPrinterKey);
+
+  Future<void> saveReceiptPaperSize(String size) =>
+      _prefs.setString(_receiptPaperSizeKey, size);
+
+  String? readReceiptPaperSize() => _prefs.getString(_receiptPaperSizeKey);
 }

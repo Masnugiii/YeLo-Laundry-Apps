@@ -15,6 +15,7 @@ void markPickupDeliveryBadgeRead(WidgetRef ref, UserRole role) {
       ref.read(managerDashboardBadgeProvider.notifier).markPickupDeliveryRead();
     case UserRole.owner:
     case UserRole.laundry:
+    case UserRole.driver:
       break;
   }
 }
@@ -35,6 +36,7 @@ void markNotificationCenterBadgeRead(WidgetRef ref, UserRole role) {
           .markNotificationCenterRead();
     case UserRole.owner:
     case UserRole.laundry:
+    case UserRole.driver:
       break;
   }
 }
@@ -49,6 +51,7 @@ void markCustomerServiceBadgeRead(WidgetRef ref, UserRole role) {
       ref.read(managerDashboardBadgeProvider.notifier).markCustomerServiceRead();
     case UserRole.owner:
     case UserRole.laundry:
+    case UserRole.driver:
       break;
   }
 }

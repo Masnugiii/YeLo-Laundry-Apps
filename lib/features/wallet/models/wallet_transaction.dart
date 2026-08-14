@@ -9,7 +9,7 @@ enum WalletTransactionType {
 
 extension WalletTransactionTypeX on WalletTransactionType {
   String get label => switch (this) {
-        WalletTransactionType.topUp => 'Top Up',
+        WalletTransactionType.topUp => 'Deposit',
         WalletTransactionType.payment => 'Pembayaran Laundry',
         WalletTransactionType.refund => 'Refund',
         WalletTransactionType.adjustment => 'Penyesuaian',
@@ -34,6 +34,8 @@ class WalletTransaction {
     this.note,
     this.adminName,
     this.deductionReason,
+    this.referenceNumber,
+    this.status,
   });
 
   final String id;
@@ -45,6 +47,8 @@ class WalletTransaction {
   final String? note;
   final String? adminName;
   final String? deductionReason;
+  final String? referenceNumber;
+  final String? status;
 
   bool get isCredit => amount > 0;
 

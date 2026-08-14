@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
 import 'package:yelo_laundry_erp/features/new_order/utils/currency_formatter.dart';
 import 'package:yelo_laundry_erp/features/receipt/presentation/widgets/receipt_qr_placeholder.dart';
-import 'package:yelo_laundry_erp/features/wallet/data/dummy_wallet_bank_account.dart';
+import 'package:yelo_laundry_erp/features/settings/providers/settings_provider.dart';
 import 'package:yelo_laundry_erp/features/wallet/models/wallet_top_up_confirmation.dart';
 import 'package:yelo_laundry_erp/features/wallet/presentation/widgets/wallet_top_up_payment_theme.dart';
+import 'package:yelo_laundry_erp/shared/widgets/api_state_widgets.dart';
 
-class WalletTopUpQrisScreen extends StatelessWidget {
+class WalletTopUpQrisScreen extends ConsumerWidget {
   const WalletTopUpQrisScreen({
     super.key,
     required this.confirmation,
@@ -23,7 +25,9 @@ class WalletTopUpQrisScreen extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final paymentConfigAsync = ref.watch(paymentConfigProvider);
+
     return Scaffold(
       backgroundColor: AppColors.dashboardBackground,
       appBar: AppBar(
@@ -40,51 +44,92 @@ class WalletTopUpQrisScreen extends StatelessWidget {
           ),
         ),
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.s20,
-                AppSpacing.s20,
-                AppSpacing.s20,
-                AppSpacing.s32,
-              ),
-              children: [
-                WalletTopUpPaymentCard(
-                  child: Column(
-                    children: [
-                      const ReceiptQrPlaceholder(
-                        description: '',
-                        fontSize: 0,
-                        size: 200,
-                      ),
-                      const SizedBox(height: AppSpacing.s20),
-                      WalletTopUpPaymentInfoRow(
-                        label: 'Merchant Name',
-                        value: dummyWalletMerchantName,
-                      ),
-                      const WalletTopUpPaymentDivider(),
-                      WalletTopUpPaymentInfoRow(
-                        label: 'Payment Amount',
-                        value: formatRupiah(confirmation.topUpAmount),
-                        emphasized: true,
-                      ),
-                      const SizedBox(height: AppSpacing.s16),
-                      const WalletTopUpPaymentStatusBadge(
-                        status: dummyWalletPaymentStatusPending,
-                      ),
-                    ],
+      body: paymentConfigAsync.when(
+        loading: () => const ApiLoadingView(message: 'Memuat data QRIS...'),
+        error: (error, _) => ApiErrorView(
+          message: messageFromError(error),
+          onRetry: () => ref.invalidate(paymentConfigProvider),
+        ),
+        data: (config) {
+          final qris = config['qris'] as Map<String, dynamic>? ?? const {};
+          final isActive = qris['isActive'] as bool? ?? false;
+          final qrImageUrl = qris['qrImageUrl'] as String?;
+          final instructions = qris['instructions'] as String? ?? '';
+
+          if (!isActive) {
+            return const ApiErrorView(
+              message:
+                  'Konfigurasi QRIS belum tersedia. Hubungi owner/manager.',
+            );
+          }
+
+          return Column(
+            children: [
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.s20,
+                    AppSpacing.s20,
+                    AppSpacing.s20,
+                    AppSpacing.s32,
                   ),
+                  children: [
+                    WalletTopUpPaymentCard(
+                      child: Column(
+                        children: [
+                          if (qrImageUrl != null && qrImageUrl.isNotEmpty)
+                            Image.network(
+                              qrImageUrl,
+                              height: 200,
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, _, _) =>
+                                  const ReceiptQrPlaceholder(
+                                description: 'QRIS tidak tersedia',
+                                fontSize: 12,
+                                size: 200,
+                              ),
+                            )
+                          else
+                            const ReceiptQrPlaceholder(
+                              description: 'QRIS belum dikonfigurasi',
+                              fontSize: 12,
+                              size: 200,
+                            ),
+                          const SizedBox(height: AppSpacing.s20),
+                          WalletTopUpPaymentInfoRow(
+                            label: 'Payment Amount',
+                            value: formatRupiah(confirmation.topUpAmount),
+                            emphasized: true,
+                          ),
+                          if (instructions.isNotEmpty) ...[
+                            const SizedBox(height: AppSpacing.s16),
+                            Text(
+                              instructions,
+                              style: GoogleFonts.poppins(
+                                fontSize: 13,
+                                color: AppColors.textSecondary,
+                                height: 1.4,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                          const SizedBox(height: AppSpacing.s16),
+                          const WalletTopUpPaymentStatusBadge(
+                            status: 'Menunggu Pembayaran',
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-          _BottomAction(
-            label: 'Saya Sudah Menerima Pembayaran',
-            onPressed: () => _continueToConfirmation(context),
-          ),
-        ],
+              ),
+              _BottomAction(
+                label: 'Saya Sudah Menerima Pembayaran',
+                onPressed: () => _continueToConfirmation(context),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

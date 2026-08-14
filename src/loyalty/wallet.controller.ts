@@ -40,12 +40,46 @@ import { LoyaltySettingsService } from './loyalty-settings.service';
 import { MembershipService } from './membership.service';
 import { RewardService } from './reward.service';
 import { VoucherService } from './voucher.service';
-import { CreateLoyaltyVoucherDto, VoucherQueryDto } from './loyalty.dto';
+import { CreateLoyaltyVoucherDto, UpdateLoyaltyVoucherDto, VoucherQueryDto } from './loyalty.dto';
 import { WalletLoyaltyService } from './wallet-loyalty.service';
 import { CustomerLoyaltyService } from './customer-loyalty.service';
+import { PreviewCksEntitlementDto } from './dto/preview-cks-entitlement.dto';
+import { RewardEntitlementService } from './reward-entitlement.service';
+import { Type } from 'class-transformer';
+import { IsInt, IsOptional, Max, Min } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 
 const VIEW_ROLES = [ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER] as const;
 const MUTATION_ROLES = [ROLES.OWNER, ROLES.CASHIER] as const;
+const LOYALTY_VIEW_ROLES = [
+  ROLES.OWNER,
+  ROLES.MANAGER,
+  ROLES.CASHIER,
+  ROLES.OPERATOR,
+] as const;
+const LOYALTY_MUTATION_ROLES = [
+  ROLES.OWNER,
+  ROLES.MANAGER,
+  ROLES.CASHIER,
+  ROLES.OPERATOR,
+] as const;
+
+class CustomerLoyaltyHistoryQueryDto {
+  @ApiPropertyOptional({ default: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @ApiPropertyOptional({ default: 50 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+}
 
 @ApiTags('Wallet')
 @ApiBearerAuth('access-token')
@@ -198,7 +232,10 @@ export class WalletController {
 @Roles(...VIEW_ROLES)
 @Controller('reward')
 export class RewardController {
-  constructor(private readonly rewardService: RewardService) {}
+  constructor(
+    private readonly rewardService: RewardService,
+    private readonly rewardEntitlementService: RewardEntitlementService,
+  ) {}
 
   @Get()
   getReward(@Query() query: RewardQueryDto) {
@@ -244,6 +281,26 @@ export class RewardController {
       .then((data) => ({
         success: true,
         message: 'Manual bonus added successfully',
+        data,
+      }));
+  }
+
+  @Post('redemptions/:redemptionId/fulfill')
+  @Roles(...LOYALTY_MUTATION_ROLES)
+  @Permissions(PERMISSIONS.ORDERS)
+  @ApiOperation({ summary: 'Fulfill a pending physical reward redemption' })
+  fulfillPhysical(
+    @Param('redemptionId', ParseUUIDPipe) redemptionId: string,
+    @CurrentUser() user: AuthenticatedEmployee,
+  ) {
+    return this.rewardEntitlementService
+      .fulfillPhysicalRedemption({
+        redemptionId,
+        employeeId: user.employeeId,
+      })
+      .then((data) => ({
+        success: true,
+        message: 'Physical reward fulfilled successfully',
         data,
       }));
   }
@@ -296,9 +353,24 @@ export class VoucherController {
   @Post()
   @Roles(ROLES.OWNER, ROLES.MANAGER)
   create(@Body() dto: CreateLoyaltyVoucherDto) {
-    return this.voucherService.create(dto).then((data) => ({
+    const payload = normalizeVoucherWriteDto(dto);
+    return this.voucherService.create(payload).then((data) => ({
       success: true,
       message: 'Voucher created successfully',
+      data,
+    }));
+  }
+
+  @Patch(':id')
+  @Roles(ROLES.OWNER, ROLES.MANAGER)
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateLoyaltyVoucherDto,
+  ) {
+    const payload = normalizeVoucherWriteDto(dto);
+    return this.voucherService.update(id, payload).then((data) => ({
+      success: true,
+      message: 'Voucher updated successfully',
       data,
     }));
   }
@@ -351,13 +423,14 @@ export class LoyaltySettingsController {
 
 @ApiTags('Customer Loyalty')
 @ApiBearerAuth('access-token')
-@Permissions(PERMISSIONS.LOYALTY, PERMISSIONS.CUSTOMERS)
-@Roles(...VIEW_ROLES)
+@Permissions(PERMISSIONS.ORDERS)
+@Roles(...LOYALTY_VIEW_ROLES)
 @Controller('customers/:customerId/loyalty')
 export class CustomerLoyaltyController {
   constructor(private readonly customerLoyaltyService: CustomerLoyaltyService) {}
 
   @Get()
+  @ApiOperation({ summary: 'Get customer YeLo Rewards summary' })
   getCustomerLoyalty(@Param('customerId', ParseUUIDPipe) customerId: string) {
     return this.customerLoyaltyService.getCustomerLoyalty(customerId).then((data) => ({
       success: true,
@@ -365,4 +438,95 @@ export class CustomerLoyaltyController {
       data,
     }));
   }
+
+  @Get('history')
+  @ApiOperation({ summary: 'Get customer YeLo Point history' })
+  getHistory(
+    @Param('customerId', ParseUUIDPipe) customerId: string,
+    @Query() query: CustomerLoyaltyHistoryQueryDto,
+  ) {
+    return this.customerLoyaltyService
+      .getPointHistory(customerId, query)
+      .then((data) => ({
+        success: true,
+        message: 'Customer reward history retrieved successfully',
+        data,
+      }));
+  }
+
+  @Get('redemptions')
+  @ApiOperation({ summary: 'Get customer reward redemptions' })
+  getRedemptions(@Param('customerId', ParseUUIDPipe) customerId: string) {
+    return this.customerLoyaltyService.listRedemptions(customerId).then((data) => ({
+      success: true,
+      message: 'Customer reward redemptions retrieved successfully',
+      data,
+    }));
+  }
+
+  @Get('catalog')
+  @ApiOperation({
+    summary:
+      'List active YeLo Rewards catalog (same RewardCatalogItem table as Customer App)',
+  })
+  getCatalog() {
+    return this.customerLoyaltyService.listRewardCatalog().then((data) => ({
+      success: true,
+      message: 'Reward catalog retrieved successfully',
+      data,
+    }));
+  }
+
+  @Get('entitlements')
+  @ApiOperation({ summary: 'Get active CKS laundry entitlements' })
+  getEntitlements(@Param('customerId', ParseUUIDPipe) customerId: string) {
+    return this.customerLoyaltyService
+      .listActiveEntitlements(customerId)
+      .then((data) => ({
+        success: true,
+        message: 'Active CKS entitlements retrieved successfully',
+        data,
+      }));
+  }
+
+  @Post('entitlements/preview')
+  @Roles(...LOYALTY_MUTATION_ROLES)
+  @ApiOperation({ summary: 'Preview free/billable KG for a CKS entitlement' })
+  previewEntitlement(
+    @Param('customerId', ParseUUIDPipe) customerId: string,
+    @Body() dto: PreviewCksEntitlementDto,
+  ) {
+    return this.customerLoyaltyService
+      .previewEntitlement({
+        customerId,
+        redemptionItemId: dto.redemptionItemId,
+        orderKg: dto.orderKg,
+        serviceType: dto.serviceType,
+      })
+      .then((data) => ({
+        success: true,
+        message: 'CKS entitlement preview calculated successfully',
+        data,
+      }));
+  }
+}
+
+function normalizeVoucherWriteDto<
+  T extends {
+    discountType?: 'PERCENTAGE' | 'FIXED';
+    discountValue?: number;
+    discountPercent?: number;
+  },
+>(dto: T): T {
+  if (
+    dto.discountPercent !== undefined &&
+    (dto.discountType === 'PERCENTAGE' || dto.discountType === undefined)
+  ) {
+    return {
+      ...dto,
+      discountType: dto.discountType ?? 'PERCENTAGE',
+      discountValue: dto.discountPercent,
+    };
+  }
+  return dto;
 }

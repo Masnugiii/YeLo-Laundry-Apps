@@ -70,6 +70,26 @@ export interface DeliverySettingsResponse {
   message?: string;
 }
 
+export interface QrisPaymentSettings {
+  isActive: boolean;
+  qrImageUrl: string | null;
+  qrPayload: string | null;
+  instructions: string;
+}
+
+export interface BankTransferPaymentSettings {
+  isActive: boolean;
+  bankName: string;
+  accountNumber: string;
+  accountHolder: string;
+  instructions: string;
+}
+
+export interface PaymentSettings {
+  qris: QrisPaymentSettings;
+  bankTransfer: BankTransferPaymentSettings;
+}
+
 export interface SettingsSectionUpdateResult<T> {
   section: string;
   data: T;

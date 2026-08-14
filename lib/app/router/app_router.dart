@@ -1,9 +1,10 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:yelo_laundry_erp/core/role/role.dart';
 import 'package:yelo_laundry_erp/core/role/role_permission.dart';
+import 'package:yelo_laundry_erp/core/role/staff_permissions.dart';
 import 'package:yelo_laundry_erp/core/session/session_provider.dart';
 import 'package:yelo_laundry_erp/features/attendance/presentation/binatu_attendance_screen.dart';
 import 'package:yelo_laundry_erp/features/attendance/presentation/employee_attendance_screen.dart';
@@ -13,19 +14,22 @@ import 'package:yelo_laundry_erp/features/auth/presentation/otp_screen.dart';
 import 'package:yelo_laundry_erp/features/auth/presentation/register_screen.dart';
 import 'package:yelo_laundry_erp/features/auth/presentation/signup_screen.dart';
 import 'package:yelo_laundry_erp/features/dashboard/presentation/binatu/binatu_dashboard_screen.dart';
-import 'package:yelo_laundry_erp/features/dashboard/presentation/coming_soon_dashboard_screen.dart';
 import 'package:yelo_laundry_erp/features/dashboard/presentation/cashier/cashier_dashboard_screen.dart';
+import 'package:yelo_laundry_erp/features/dashboard/presentation/driver/driver_dashboard_screen.dart';
 import 'package:yelo_laundry_erp/features/dashboard/presentation/cashier/cashier_laundry_driver_dashboard_screen.dart';
 import 'package:yelo_laundry_erp/features/dashboard/presentation/cashier/cashier_laundry_dashboard_screen.dart';
 import 'package:yelo_laundry_erp/features/binatu_monitoring/models/binatu_monitoring_models.dart';
 import 'package:yelo_laundry_erp/features/binatu_monitoring/presentation/binatu_monitoring_employee_detail_screen.dart';
 import 'package:yelo_laundry_erp/features/binatu_monitoring/presentation/binatu_monitoring_screen.dart';
 import 'package:yelo_laundry_erp/features/binatu/presentation/binatu_order_detail_screen.dart';
+import 'package:yelo_laundry_erp/features/laci_laundry/presentation/laci_laundry_screen.dart';
+import 'package:yelo_laundry_erp/features/laci_laundry/presentation/storage_box_detail_screen.dart';
 import 'package:yelo_laundry_erp/features/binatu/presentation/operator_ironing_assistance_screen.dart';
 import 'package:yelo_laundry_erp/features/notifications/presentation/notification_center_screen.dart';
 import 'package:yelo_laundry_erp/features/settings/presentation/cashier_receipt_printer_settings_screen.dart';
 import 'package:yelo_laundry_erp/features/dashboard/presentation/owner/owner_dashboard_screen.dart';
 import 'package:yelo_laundry_erp/features/dashboard/presentation/role_check_screen.dart';
+import 'package:yelo_laundry_erp/features/dashboard/presentation/today_activity_screen.dart';
 import 'package:yelo_laundry_erp/features/customer/presentation/add_customer_screen.dart';
 import 'package:yelo_laundry_erp/features/customer/presentation/customer_detail_screen.dart';
 import 'package:yelo_laundry_erp/features/customer/presentation/customers_screen.dart';
@@ -44,10 +48,12 @@ import 'package:yelo_laundry_erp/features/orders/presentation/payment/qris_payme
 import 'package:yelo_laundry_erp/features/orders/presentation/payment/transfer_payment_screen.dart';
 import 'package:yelo_laundry_erp/features/orders/presentation/payment/wallet_payment_screen.dart';
 import 'package:yelo_laundry_erp/features/orders/presentation/order_payment_success_screen.dart';
+import 'package:yelo_laundry_erp/features/orders/presentation/incoming_order_detail_screen.dart';
 import 'package:yelo_laundry_erp/features/orders/presentation/today_orders_screen.dart';
 import 'package:yelo_laundry_erp/features/orders/presentation/unpaid_orders_screen.dart';
 import 'package:yelo_laundry_erp/features/pickup_delivery/presentation/pickup_delivery_screen.dart';
 import 'package:yelo_laundry_erp/features/points/presentation/point_history_screen.dart';
+import 'package:yelo_laundry_erp/features/points/presentation/reward_history_screen.dart';
 import 'package:yelo_laundry_erp/features/reports/presentation/reports_screen.dart';
 import 'package:yelo_laundry_erp/features/receipt/models/laundry_receipt.dart';
 import 'package:yelo_laundry_erp/features/receipt/presentation/laundry_receipt_screen.dart';
@@ -85,32 +91,43 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   ref.onDispose(refresh.dispose);
 
   return GoRouter(
-    initialLocation: '/',
+    initialLocation: '/splash',
     refreshListenable: refresh,
     redirect: (context, state) {
       final authState = ref.read(authProvider);
       final path = state.uri.path;
-      final isAuthRoute = path == '/login' ||
-          path == '/signup' ||
-          path == '/otp' ||
-          path == '/register' ||
-          path == '/login-mode-selection';
-
-      if (authState.status == AuthStatus.initial ||
-          authState.status == AuthStatus.loading) {
-        return path == '/' ? null : '/';
+      if (!kDebugMode && path == '/login-mode-selection') {
+        return '/login';
       }
 
-      if (authState.status != AuthStatus.authenticated) {
-        return isAuthRoute || path == '/' ? null : '/login';
+      const publicRoutes = {
+        '/splash',
+        '/login',
+        '/signup',
+        '/otp',
+        '/register',
+        '/login-mode-selection',
+      };
+
+      final isAuth = authState.status == AuthStatus.authenticated;
+      final isLoading = authState.status == AuthStatus.initial ||
+          authState.status == AuthStatus.loading;
+
+      // Cold-start restore only — never after login (login() skips loading).
+      if (isLoading) {
+        return path == '/splash' ? null : '/splash';
       }
 
-      if (isAuthRoute || path == '/') {
-        return '/role-check';
-      }
+      // SplashScreen owns leaving /splash (minimum visual duration on startup).
+      if (path == '/splash') return null;
+
+      if (!isAuth && !publicRoutes.contains(path)) return '/login';
+      // Login/OTP/register → role dashboard directly (no splash).
+      if (isAuth && publicRoutes.contains(path)) return '/role-check';
 
       final role = authState.session.role;
-      return RolePermissions.redirectForRole(role, path);
+      final permissions = staffPermissionsFromSession(authState.session);
+      return RolePermissions.redirectForSession(role, permissions, path);
     },
     routes: [
     GoRoute(
@@ -236,7 +253,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       },
     ),
     GoRoute(
-      path: '/',
+      path: '/splash',
       builder: (context, state) => const SplashScreen(),
     ),
     GoRoute(
@@ -296,12 +313,27 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       builder: (context, state) => const BinatuDashboardScreen(),
     ),
     GoRoute(
+      path: '/dashboard-driver',
+      builder: (context, state) => const DriverDashboardScreen(),
+    ),
+    GoRoute(
       path: '/dashboard-binatu',
       redirect: (context, state) => '/dashboard-laundry',
     ),
     GoRoute(
       path: '/orders/today',
       builder: (context, state) => const TodayOrdersScreen(),
+    ),
+    GoRoute(
+      path: '/orders/:orderId',
+      builder: (context, state) {
+        final orderId = state.pathParameters['orderId']!;
+        return IncomingOrderDetailScreen(orderId: orderId);
+      },
+    ),
+    GoRoute(
+      path: '/activities/today',
+      builder: (context, state) => const TodayActivityScreen(),
     ),
     GoRoute(
       path: '/unpaid-orders',
@@ -320,6 +352,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       builder: (context, state) {
         final customerId = state.uri.queryParameters['customerId'] ?? '';
         return PointHistoryScreen(customerId: customerId);
+      },
+    ),
+    GoRoute(
+      path: '/customer/reward-history',
+      builder: (context, state) {
+        final customerId = state.uri.queryParameters['customerId'] ?? '';
+        return RewardHistoryScreen(customerId: customerId);
       },
     ),
     GoRoute(
@@ -478,6 +517,23 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     GoRoute(
       path: '/pickup-delivery',
       builder: (context, state) => const PickupDeliveryScreen(),
+    ),
+    GoRoute(
+      path: '/laci-laundry',
+      builder: (context, state) => const LaciLaundryScreen(),
+      routes: [
+        GoRoute(
+          path: 'box/:code',
+          builder: (context, state) {
+            final code = state.pathParameters['code']!;
+            final initialBox = state.extra as Map<String, dynamic>?;
+            return StorageBoxDetailScreen(
+              boxCode: code,
+              initialBox: initialBox,
+            );
+          },
+        ),
+      ],
     ),
     GoRoute(
       path: '/customers',

@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 
+import 'package:yelo_laundry_customer/core/auth/auth_session_controller.dart';
 import 'package:yelo_laundry_customer/core/config/app_config.dart';
 import 'package:yelo_laundry_customer/core/network/api_exception.dart';
 import 'package:yelo_laundry_customer/core/network/api_interceptors.dart';
@@ -8,9 +9,10 @@ import 'package:yelo_laundry_customer/core/storage/secure_storage_service.dart';
 
 class ApiClient {
   ApiClient({
-    required SecureStorageService secureStorage,
+    required this._secureStorage,
+    AuthSessionController? authSession,
     UnauthorizedHandler? onUnauthorized,
-  }) : _secureStorage = secureStorage {
+  }) {
     _dio = Dio(
       BaseOptions(
         baseUrl: AppConfig.apiBaseUrl,
@@ -30,6 +32,7 @@ class ApiClient {
       TokenInterceptor(
         secureStorage: _secureStorage,
         refreshDio: _refreshDio,
+        authSession: authSession,
         onUnauthorized: onUnauthorized,
       ),
       RetryInterceptor(),
@@ -84,6 +87,32 @@ class ApiClient {
         data: data,
         queryParameters: queryParameters,
       ),
+      parser: parser,
+    );
+  }
+
+  Future<T> uploadMultipart<T>(
+    String path, {
+    required String fileField,
+    required String filePath,
+    Map<String, dynamic>? fields,
+    T Function(dynamic json)? parser,
+  }) async {
+    return _request(
+      () async {
+        final formData = FormData.fromMap({
+          ...?fields,
+          fileField: await MultipartFile.fromFile(filePath),
+        });
+
+        return _dio.post<Map<String, dynamic>>(
+          path,
+          data: formData,
+          options: Options(
+            contentType: 'multipart/form-data',
+          ),
+        );
+      },
       parser: parser,
     );
   }

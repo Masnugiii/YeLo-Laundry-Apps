@@ -33,15 +33,22 @@ import {
 } from './catalog.dto';
 import { CatalogService } from './catalog.service';
 
+const ORDER_COMPOSITION_ROLES = [
+  ROLES.OWNER,
+  ROLES.MANAGER,
+  ROLES.CASHIER,
+  ROLES.OPERATOR,
+] as const;
+
 @ApiTags('Catalog')
 @ApiBearerAuth('access-token')
-@Permissions(PERMISSIONS.SETTINGS)
-@Roles(ROLES.OWNER, ROLES.MANAGER)
 @Controller('catalog')
 export class CatalogController {
   constructor(private readonly catalogService: CatalogService) {}
 
   @Get('services')
+  @Permissions(PERMISSIONS.ORDERS)
+  @Roles(...ORDER_COMPOSITION_ROLES)
   @ApiOperation({ summary: 'List laundry services' })
   async listServices(@Query() query: ServiceQueryDto) {
     const data = await this.catalogService.listServices(query);
@@ -53,6 +60,8 @@ export class CatalogController {
   }
 
   @Get('services/:id')
+  @Permissions(PERMISSIONS.ORDERS)
+  @Roles(...ORDER_COMPOSITION_ROLES)
   @ApiOperation({ summary: 'Get service detail' })
   async getService(@Param('id', ParseUUIDPipe) id: string) {
     const data = await this.catalogService.getService(id);
@@ -64,6 +73,7 @@ export class CatalogController {
   }
 
   @Post('services')
+  @Permissions(PERMISSIONS.SETTINGS)
   @Roles(ROLES.OWNER)
   @UseGuards(OwnerWriteGuard)
   @ApiOperation({ summary: 'Create service (OWNER only)' })
@@ -80,6 +90,7 @@ export class CatalogController {
   }
 
   @Patch('services/:id')
+  @Permissions(PERMISSIONS.SETTINGS)
   @Roles(ROLES.OWNER)
   @UseGuards(OwnerWriteGuard)
   @ApiOperation({ summary: 'Update service (OWNER only)' })
@@ -101,6 +112,7 @@ export class CatalogController {
   }
 
   @Delete('services/:id')
+  @Permissions(PERMISSIONS.SETTINGS)
   @Roles(ROLES.OWNER)
   @UseGuards(OwnerWriteGuard)
   @HttpCode(HttpStatus.OK)
@@ -118,6 +130,8 @@ export class CatalogController {
   }
 
   @Get('prices')
+  @Permissions(PERMISSIONS.ORDERS)
+  @Roles(...ORDER_COMPOSITION_ROLES)
   @ApiOperation({ summary: 'List service prices' })
   async listPrices(@Query('serviceId') serviceId?: string) {
     const data = await this.catalogService.listPrices(serviceId);
@@ -129,6 +143,7 @@ export class CatalogController {
   }
 
   @Post('prices')
+  @Permissions(PERMISSIONS.SETTINGS)
   @Roles(ROLES.OWNER)
   @UseGuards(OwnerWriteGuard)
   @ApiOperation({ summary: 'Create service price (OWNER only)' })
@@ -145,6 +160,7 @@ export class CatalogController {
   }
 
   @Patch('prices/:id')
+  @Permissions(PERMISSIONS.SETTINGS)
   @Roles(ROLES.OWNER)
   @UseGuards(OwnerWriteGuard)
   @ApiOperation({ summary: 'Update service price (OWNER only)' })
@@ -166,6 +182,7 @@ export class CatalogController {
   }
 
   @Delete('prices/:id')
+  @Permissions(PERMISSIONS.SETTINGS)
   @Roles(ROLES.OWNER)
   @UseGuards(OwnerWriteGuard)
   @HttpCode(HttpStatus.OK)

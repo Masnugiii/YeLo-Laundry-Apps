@@ -1,4 +1,6 @@
 import 'package:yelo_laundry_customer/core/config/app_config.dart';
+import 'package:yelo_laundry_customer/core/dev/dev_preview_data.dart';
+import 'package:yelo_laundry_customer/core/dev/dev_preview_gate.dart';
 import 'package:yelo_laundry_customer/core/network/api_client.dart';
 import 'package:yelo_laundry_customer/core/network/api_response.dart';
 
@@ -11,6 +13,8 @@ class AppNotification {
     required this.createdAt,
     required this.isRead,
     this.priority,
+    this.orderId,
+    this.orderNumber,
   });
 
   final String id;
@@ -20,6 +24,22 @@ class AppNotification {
   final String createdAt;
   final bool isRead;
   final String? priority;
+  final String? orderId;
+  final String? orderNumber;
+
+  AppNotification copyWith({bool? isRead}) {
+    return AppNotification(
+      id: id,
+      title: title,
+      message: message,
+      type: type,
+      createdAt: createdAt,
+      isRead: isRead ?? this.isRead,
+      priority: priority,
+      orderId: orderId,
+      orderNumber: orderNumber,
+    );
+  }
 
   factory AppNotification.fromJson(Map<String, dynamic> json) {
     return AppNotification(
@@ -30,6 +50,8 @@ class AppNotification {
       createdAt: json['createdAt'] as String,
       isRead: json['isRead'] as bool? ?? false,
       priority: json['priority'] as String?,
+      orderId: json['orderId'] as String?,
+      orderNumber: json['orderNumber'] as String?,
     );
   }
 }
@@ -43,6 +65,10 @@ class NotificationRepository {
     int page = 1,
     bool? unreadOnly,
   }) async {
+    if (DevPreviewGate.isActive) {
+      return DevPreviewData.paginatedNotifications;
+    }
+
     final envelope = await _api.getEnvelope<Map<String, dynamic>>(
       '/notifications',
       queryParameters: {
@@ -63,6 +89,10 @@ class NotificationRepository {
   }
 
   Future<AppNotification> getDetail(String id) async {
+    if (DevPreviewGate.isActive) {
+      return DevPreviewData.notificationDetail(id);
+    }
+
     final data = await _api.get<Map<String, dynamic>>(
       '/notifications/$id',
       parser: (json) => json as Map<String, dynamic>,
@@ -71,6 +101,10 @@ class NotificationRepository {
   }
 
   Future<int> getUnreadCount() async {
+    if (DevPreviewGate.isActive) {
+      return DevPreviewData.notifications.where((item) => !item.isRead).length;
+    }
+
     final data = await _api.get<Map<String, dynamic>>(
       '/notifications/unread-count',
       parser: (json) => json as Map<String, dynamic>,
@@ -79,14 +113,20 @@ class NotificationRepository {
   }
 
   Future<void> markRead(String id) async {
+    if (DevPreviewGate.isActive) return;
     await _api.post<void>('/notifications/$id/read');
   }
 
   Future<void> markAllRead() async {
+    if (DevPreviewGate.isActive) {
+      DevPreviewData.markAllNotificationsRead();
+      return;
+    }
     await _api.post<void>('/notifications/read-all');
   }
 
   Future<void> delete(String id) async {
+    if (DevPreviewGate.isActive) return;
     await _api.delete<void>('/notifications/$id');
   }
 }

@@ -2,8 +2,14 @@
 
 import Link from "next/link";
 import { Card, CardTitle } from "@/components/ui/card";
+import { isDevToolsEnabled } from "@/lib/env";
 
 const sections = [
+  {
+    href: "/settings/internal-access",
+    title: "Internal Access",
+    description: "Role-based menu access for the Internal App",
+  },
   {
     href: "/settings/company",
     title: "Company Profile",
@@ -37,7 +43,7 @@ const sections = [
   {
     href: "/settings/services",
     title: "Services",
-    description: "Laundry service catalog",
+    description: "Laundry service catalog and pricing",
   },
   {
     href: "/settings/pricing",
@@ -48,6 +54,21 @@ const sections = [
     href: "/settings/numbering",
     title: "Business Numbering",
     description: "ORD, INV, EXP, PAY, CST, EMP",
+  },
+  {
+    href: "/settings/payment",
+    title: "Payment",
+    description: "Customer app QRIS and bank transfer configuration",
+  },
+  {
+    href: "/settings/promo",
+    title: "Promo",
+    description: "Customer app promo percentage badges and voucher rules",
+  },
+  {
+    href: "/settings/perfumes",
+    title: "Perfume",
+    description: "Laundry perfume options for customer checkout",
   },
   {
     href: "/settings/payment-methods",
@@ -61,8 +82,8 @@ const sections = [
   },
   {
     href: "/settings/loyalty",
-    title: "Loyalty",
-    description: "Points, membership, vouchers",
+    title: "YeLo Rewards",
+    description: "Point rules, deposit rules, membership, cashback, reward catalog",
   },
   {
     href: "/finance/payroll/settings",
@@ -70,6 +91,18 @@ const sections = [
     description: "Salary calculation settings",
   },
 ];
+
+const devSections = isDevToolsEnabled()
+  ? [
+      {
+        href: "/settings/development-tools",
+        title: "Development Tools",
+        description: "Local-only OTP testing utilities for Customer App",
+      },
+    ]
+  : [];
+
+const allSections = [...sections, ...devSections];
 
 export default function SettingsPage() {
   return (
@@ -82,7 +115,7 @@ export default function SettingsPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {sections.map((section) => (
+        {allSections.map((section) => (
           <Link key={section.href} href={section.href}>
             <Card className="h-full transition hover:border-blue-200 hover:shadow-md">
               <CardTitle>{section.title}</CardTitle>

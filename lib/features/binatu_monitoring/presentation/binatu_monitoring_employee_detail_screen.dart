@@ -1,19 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:yelo_laundry_erp/app/theme/app_colors.dart';
 import 'package:yelo_laundry_erp/app/theme/app_radius.dart';
 import 'package:yelo_laundry_erp/app/theme/app_shadows.dart';
 import 'package:yelo_laundry_erp/app/theme/app_spacing.dart';
-import 'package:yelo_laundry_erp/features/binatu_monitoring/data/dummy_binatu_monitoring_data.dart';
 import 'package:yelo_laundry_erp/features/binatu_monitoring/models/binatu_monitoring_models.dart';
 import 'package:yelo_laundry_erp/features/binatu_monitoring/presentation/widgets/binatu_monitoring_empty_state.dart';
 import 'package:yelo_laundry_erp/features/binatu_monitoring/presentation/widgets/binatu_monitoring_filter_section.dart';
 import 'package:yelo_laundry_erp/features/binatu_monitoring/presentation/widgets/binatu_monitoring_order_card.dart';
+import 'package:yelo_laundry_erp/features/binatu_monitoring/providers/binatu_employee_detail_provider.dart';
 import 'package:yelo_laundry_erp/features/binatu_monitoring/utils/binatu_monitoring_date_helper.dart';
 import 'package:yelo_laundry_erp/features/dashboard/presentation/owner/widgets/pos_section_title.dart';
+import 'package:yelo_laundry_erp/shared/widgets/api_state_widgets.dart';
 
-class BinatuMonitoringEmployeeDetailScreen extends StatefulWidget {
+class BinatuMonitoringEmployeeDetailScreen extends ConsumerStatefulWidget {
   const BinatuMonitoringEmployeeDetailScreen({
     super.key,
     required this.employeeId,
@@ -26,12 +28,12 @@ class BinatuMonitoringEmployeeDetailScreen extends StatefulWidget {
   final DateTime? initialDate;
 
   @override
-  State<BinatuMonitoringEmployeeDetailScreen> createState() =>
+  ConsumerState<BinatuMonitoringEmployeeDetailScreen> createState() =>
       _BinatuMonitoringEmployeeDetailScreenState();
 }
 
 class _BinatuMonitoringEmployeeDetailScreenState
-    extends State<BinatuMonitoringEmployeeDetailScreen> {
+    extends ConsumerState<BinatuMonitoringEmployeeDetailScreen> {
   late BinatuMonitoringDateFilter _filter;
   late DateTime _customDate;
 
@@ -49,6 +51,12 @@ class _BinatuMonitoringEmployeeDetailScreenState
       );
 
   DateTime get _displayDate => BinatuMonitoringDateHelper.displayDate(
+        filter: _filter,
+        customDate: _customDate,
+      );
+
+  BinatuEmployeeDetailQuery get _query => BinatuEmployeeDetailQuery(
+        employeeId: widget.employeeId,
         filter: _filter,
         customDate: _customDate,
       );
@@ -77,18 +85,8 @@ class _BinatuMonitoringEmployeeDetailScreenState
 
   @override
   Widget build(BuildContext context) {
-    final employee = employeeMonitoringById(widget.employeeId);
-
-    if (employee == null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Detail Binatu')),
-        body: const Center(child: Text('Karyawan tidak ditemukan.')),
-      );
-    }
-
+    final detailAsync = ref.watch(binatuEmployeeDetailProvider(_query));
     final dateRange = _dateRange;
-    final stats = employeeStatsForRange(widget.employeeId, dateRange);
-    final orders = ordersForEmployeeInRange(widget.employeeId, dateRange);
 
     return Scaffold(
       backgroundColor: AppColors.dashboardBackground,
@@ -97,81 +95,98 @@ class _BinatuMonitoringEmployeeDetailScreenState
         foregroundColor: AppColors.onPrimary,
         elevation: 0,
         iconTheme: const IconThemeData(color: AppColors.onPrimary),
-        title: Text(
-          employee.name,
-          style: GoogleFonts.poppins(
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
-            color: AppColors.onPrimary,
+        title: detailAsync.maybeWhen(
+          data: (detail) => Text(
+            detail.employee.name,
+            style: GoogleFonts.poppins(
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              color: AppColors.onPrimary,
+            ),
+          ),
+          orElse: () => Text(
+            'Detail Binatu',
+            style: GoogleFonts.poppins(
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              color: AppColors.onPrimary,
+            ),
           ),
         ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.s20,
-          AppSpacing.s20,
-          AppSpacing.s20,
-          AppSpacing.s32,
+      body: detailAsync.when(
+        loading: () => const ApiLoadingView(message: 'Memuat detail binatu...'),
+        error: (error, _) => ApiErrorView(
+          message: messageFromError(error),
+          onRetry: () => ref.invalidate(binatuEmployeeDetailProvider(_query)),
         ),
-        children: [
-          BinatuMonitoringFilterSection(
-            selectedFilter: _filter,
-            selectedDate: _displayDate,
-            onFilterSelected: _onFilterSelected,
-            onDatePickerTap: _pickDate,
+        data: (detail) => ListView(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.s20,
+            AppSpacing.s20,
+            AppSpacing.s20,
+            AppSpacing.s32,
           ),
-          const SizedBox(height: AppSpacing.s24),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(AppSpacing.s20),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: AppRadius.cardRadius,
-              boxShadow: AppShadows.md(),
+          children: [
+            BinatuMonitoringFilterSection(
+              selectedFilter: _filter,
+              selectedDate: _displayDate,
+              onFilterSelected: _onFilterSelected,
+              onDatePickerTap: _pickDate,
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  employee.name,
-                  style: GoogleFonts.poppins(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.primary,
+            const SizedBox(height: AppSpacing.s24),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(AppSpacing.s20),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: AppRadius.cardRadius,
+                boxShadow: AppShadows.md(),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    detail.employee.name,
+                    style: GoogleFonts.poppins(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primary,
+                    ),
                   ),
-                ),
-                const SizedBox(height: AppSpacing.s8),
-                Text(
-                  dateRange.displayLabel,
-                  style: GoogleFonts.poppins(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.textSecondary,
+                  const SizedBox(height: AppSpacing.s8),
+                  Text(
+                    dateRange.displayLabel,
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
-                ),
-                const SizedBox(height: AppSpacing.s16),
-                _SummaryMetric(
-                  label: 'Total Ironing Orders',
-                  value: '${stats.totalIroningOrders}',
-                ),
-                _SummaryMetric(
-                  label: 'Total Kg Ironed',
-                  value: '${stats.totalKgIroned.toStringAsFixed(1)} Kg',
-                ),
+                  const SizedBox(height: AppSpacing.s16),
+                  _SummaryMetric(
+                    label: 'Total Ironing Orders',
+                    value: '${detail.stats.totalIroningOrders}',
+                  ),
+                  _SummaryMetric(
+                    label: 'Total Kg Ironed',
+                    value: '${detail.stats.totalKgIroned.toStringAsFixed(1)} Kg',
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.s24),
+            const PosSectionTitle(title: 'Order List'),
+            const SizedBox(height: AppSpacing.s16),
+            if (detail.orders.isEmpty)
+              const BinatuMonitoringEmptyState()
+            else
+              for (var i = 0; i < detail.orders.length; i++) ...[
+                if (i > 0) const SizedBox(height: AppSpacing.s12),
+                BinatuMonitoringOrderCard(order: detail.orders[i]),
               ],
-            ),
-          ),
-          const SizedBox(height: AppSpacing.s24),
-          const PosSectionTitle(title: 'Order List'),
-          const SizedBox(height: AppSpacing.s16),
-          if (orders.isEmpty)
-            const BinatuMonitoringEmptyState()
-          else
-            for (var i = 0; i < orders.length; i++) ...[
-              if (i > 0) const SizedBox(height: AppSpacing.s12),
-              BinatuMonitoringOrderCard(order: orders[i]),
-            ],
-        ],
+          ],
+        ),
       ),
     );
   }

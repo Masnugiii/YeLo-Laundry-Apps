@@ -37,7 +37,6 @@ import { PaginatedPayments, PaymentResponse } from './payment.mapper';
 import { PaymentService } from './payment.service';
 
 const VIEW_ROLES = [ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER, ROLES.OPERATOR] as const;
-const WRITE_ROLES = [ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER] as const;
 
 const PAYMENT_EXAMPLE = {
   id: 'ff0e8400-e29b-41d4-a716-446655440020',
@@ -107,7 +106,6 @@ export class PaymentController {
   }
 
   @Post()
-  @Roles(...WRITE_ROLES)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a payment for an order' })
   @ApiBody({
@@ -144,7 +142,6 @@ export class PaymentController {
   }
 
   @Patch(':id')
-  @Roles(...WRITE_ROLES)
   @ApiOperation({ summary: 'Update payment' })
   @ApiParam({ name: 'id', description: 'Payment UUID' })
   @ApiBody({ type: UpdatePaymentDto })
@@ -157,7 +154,6 @@ export class PaymentController {
   }
 
   @Delete(':id')
-  @Roles(...WRITE_ROLES)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Void payment (soft delete)' })
   @ApiParam({ name: 'id', description: 'Payment UUID' })
@@ -169,7 +165,6 @@ export class PaymentController {
   }
 
   @Post(':id/refund')
-  @Roles(...WRITE_ROLES)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Refund payment (full or partial)' })
   @ApiParam({ name: 'id', description: 'Payment UUID' })

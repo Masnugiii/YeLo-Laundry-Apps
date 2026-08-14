@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:yelo_laundry_erp/features/new_order/utils/currency_formatter.dart';
 import 'package:yelo_laundry_erp/features/receipt/presentation/receipt_theme.dart';
+import 'package:yelo_laundry_erp/features/receipt/presentation/widgets/company_receipt_header.dart';
 import 'package:yelo_laundry_erp/features/receipt/presentation/widgets/receipt_divider.dart';
 import 'package:yelo_laundry_erp/features/receipt/presentation/widgets/receipt_info_row.dart';
-import 'package:yelo_laundry_erp/features/settings/data/dummy_laundry_profile.dart';
+import 'package:yelo_laundry_erp/features/settings/providers/settings_provider.dart';
 import 'package:yelo_laundry_erp/features/wallet/models/wallet_deduction_receipt.dart';
 
-class WalletDeductionReceiptContent extends StatelessWidget {
+class WalletDeductionReceiptContent extends ConsumerWidget {
   const WalletDeductionReceiptContent({
     super.key,
     required this.receipt,
@@ -18,11 +20,14 @@ class WalletDeductionReceiptContent extends StatelessWidget {
   final ReceiptLayoutConfig config;
 
   @override
-  Widget build(BuildContext context) {
-    final profile = getLaundryProfile();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final receiptSettings = ref.watch(receiptSettingsProvider).value;
     final base = config.baseFontSize;
     final title = config.titleFontSize;
     final spacing = config.sectionSpacing;
+    final footerNote = receiptSettings?.footerText?.trim().isNotEmpty == true
+        ? receiptSettings!.footerText!
+        : receipt.footerNote;
 
     return Container(
       width: config.width,
@@ -34,45 +39,20 @@ class WalletDeductionReceiptContent extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Center(
-            child: Image.asset(
-              profile.logoAsset,
-              height: config.logoHeight,
-              fit: BoxFit.contain,
-            ),
+          CompanyReceiptHeader(
+            config: receiptSettings,
+            logoHeight: config.logoHeight,
+            titleFontSize: title,
+            baseFontSize: base,
+            spacing: spacing,
           ),
           SizedBox(height: spacing),
           const ReceiptDivider(),
           Center(
             child: Text(
-              profile.name,
+              'STRUK PEMBAYARAN YELO WALLET',
+              textAlign: TextAlign.center,
               style: ReceiptTheme.titleText(title),
-              textAlign: TextAlign.center,
-            ),
-          ),
-          SizedBox(height: 4),
-          Center(
-            child: Text(
-              profile.fullAddress,
-              textAlign: TextAlign.center,
-              style: ReceiptTheme.centerText(base),
-            ),
-          ),
-          SizedBox(height: 4),
-          Center(
-            child: Text(
-              'WA : ${profile.whatsapp}',
-              textAlign: TextAlign.center,
-              style: ReceiptTheme.centerText(base),
-            ),
-          ),
-          SizedBox(height: spacing),
-          const ReceiptDivider(),
-          Center(
-            child: Text(
-              'STRUK PENGURANGAN SALDO YELO WALLET',
-              textAlign: TextAlign.center,
-              style: ReceiptTheme.titleText(title - 1),
             ),
           ),
           SizedBox(height: spacing),
@@ -82,14 +62,6 @@ class WalletDeductionReceiptContent extends StatelessWidget {
             value: receipt.transactionNumber,
             fontSize: base,
           ),
-          const ReceiptDivider(),
-          ReceiptInfoRow(
-            label: 'Transaction Date',
-            value: '${receipt.transactionDate}\n${receipt.transactionTime}',
-            fontSize: base,
-            multilineValue: true,
-          ),
-          SizedBox(height: spacing),
           const ReceiptDivider(),
           ReceiptInfoRow(
             label: 'Customer Name',
@@ -111,7 +83,7 @@ class WalletDeductionReceiptContent extends StatelessWidget {
           ),
           const ReceiptDivider(),
           ReceiptInfoRow(
-            label: 'Nominal Dipotong',
+            label: 'Nominal Pembayaran',
             value: formatRupiah(receipt.deductionAmount),
             fontSize: base,
             emphasized: true,
@@ -125,31 +97,8 @@ class WalletDeductionReceiptContent extends StatelessWidget {
           ),
           SizedBox(height: spacing),
           const ReceiptDivider(),
-          ReceiptInfoRow(
-            label: 'Reason',
-            value: receipt.reason,
-            fontSize: base,
-          ),
-          if (receipt.relatedOrder != null &&
-              receipt.relatedOrder!.isNotEmpty) ...[
-            const ReceiptDivider(),
-            ReceiptInfoRow(
-              label: 'Related Order',
-              value: receipt.relatedOrder!,
-              fontSize: base,
-            ),
-          ],
-          SizedBox(height: spacing),
-          const ReceiptDivider(),
-          ReceiptInfoRow(
-            label: 'Kasir',
-            value: receipt.cashierName,
-            fontSize: base,
-          ),
-          SizedBox(height: spacing),
-          const ReceiptDivider(),
           Text(
-            receipt.footerNote,
+            footerNote,
             textAlign: TextAlign.center,
             style: ReceiptTheme.baseText(base),
           ),
@@ -158,5 +107,3 @@ class WalletDeductionReceiptContent extends StatelessWidget {
     );
   }
 }
-
-typedef WalletDeductionReceiptWidget = WalletDeductionReceiptContent;

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:yelo_laundry_erp/core/role/role.dart';
+
 enum EmployeeRole {
   owner,
   manager,
@@ -10,7 +12,7 @@ enum EmployeeRole {
 extension EmployeeRoleX on EmployeeRole {
   String get label => switch (this) {
         EmployeeRole.owner => 'Owner',
-        EmployeeRole.manager => 'Manager',
+        EmployeeRole.manager => managerRoleDisplayLabel,
         EmployeeRole.kasir => 'Kasir',
         EmployeeRole.binatu => 'Binatu',
       };
@@ -67,7 +69,7 @@ extension EmployeeFilterX on EmployeeFilter {
   String get label => switch (this) {
         EmployeeFilter.all => 'All',
         EmployeeFilter.owner => 'Owner',
-        EmployeeFilter.manager => 'Manager',
+        EmployeeFilter.manager => managerRoleDisplayLabel,
         EmployeeFilter.kasir => 'Kasir',
         EmployeeFilter.binatu => 'Binatu',
         EmployeeFilter.inactive => 'Inactive',

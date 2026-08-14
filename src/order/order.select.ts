@@ -119,6 +119,10 @@ export const orderDetailSelect = {
   orderStatus: true,
   paymentMethod: true,
   notes: true,
+  storageBoxId: true,
+  lastStorageBoxId: true,
+  storageAssignedAt: true,
+  storageAssignedByEmployeeId: true,
   createdByEmployeeId: true,
   updatedByEmployeeId: true,
   createdAt: true,
@@ -183,6 +187,23 @@ export const orderDetailSelect = {
       driver: { select: employeeSummarySelect },
     },
   },
+  storageBox: {
+    select: {
+      id: true,
+      code: true,
+      boxNumber: true,
+      locker: { select: { code: true, name: true } },
+    },
+  },
+  lastStorageBox: {
+    select: {
+      id: true,
+      code: true,
+      boxNumber: true,
+      locker: { select: { code: true, name: true } },
+    },
+  },
+  storageAssignedBy: { select: employeeSummarySelect },
 } satisfies Prisma.OrderSelect;
 
 export type OrderListRecord = Prisma.OrderGetPayload<{

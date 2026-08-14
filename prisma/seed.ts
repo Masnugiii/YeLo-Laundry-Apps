@@ -6,6 +6,8 @@ import {
   seedDefaultServicePrices,
 } from './seed-settings.helpers';
 import { seedDefaultNumberingSequences } from './seed-numbering.helpers';
+import { seedStorageLockersAndBoxes } from './seed-storage.helpers';
+import { seedYeloRewardCatalog } from './seed-reward-catalog.helpers';
 
 const prisma = new PrismaClient();
 
@@ -17,7 +19,9 @@ const PERMISSIONS = [
   { code: 'orders', name: 'Orders', module: 'orders' },
   { code: 'finance', name: 'Finance', module: 'finance' },
   { code: 'customers', name: 'Customers', module: 'customers' },
-  { code: 'wallet', name: 'Wallet', module: 'wallet' },
+  { code: 'wallet', name: 'Wallet View', module: 'wallet' },
+  { code: 'wallet_topup', name: 'Wallet Top Up', module: 'wallet' },
+  { code: 'wallet_deduct', name: 'Wallet Deduct', module: 'wallet' },
   { code: 'loyalty', name: 'Loyalty', module: 'loyalty' },
   { code: 'attendance', name: 'Attendance', module: 'attendance' },
   { code: 'ironing', name: 'Ironing', module: 'ironing' },
@@ -27,6 +31,7 @@ const PERMISSIONS = [
   { code: 'settings', name: 'Settings', module: 'settings' },
   { code: 'notification', name: 'Notification', module: 'notification' },
   { code: 'customer_service', name: 'Customer Service', module: 'customer_service' },
+  { code: 'storage', name: 'Storage', module: 'storage' },
 ] as const;
 
 const ROLES: Array<{ code: RoleCode; name: string; description: string }> = [
@@ -44,8 +49,8 @@ const ROLES: Array<{ code: RoleCode; name: string; description: string }> = [
 
 const ROLE_PERMISSION_MAP: Record<RoleCode, readonly string[]> = {
   owner: PERMISSIONS.map((p) => p.code),
-  cashier: ['orders', 'finance', 'attendance', 'customers', 'wallet', 'pickup', 'notification', 'customer_service'],
-  cashier_laundry: ['orders', 'attendance', 'ironing', 'pickup', 'notification', 'customer_service'],
+  cashier: ['orders', 'finance', 'attendance', 'customers', 'wallet', 'wallet_topup', 'wallet_deduct', 'pickup', 'notification', 'customer_service', 'storage'],
+  cashier_laundry: ['orders', 'finance', 'customers', 'attendance', 'ironing', 'pickup', 'notification', 'customer_service', 'storage'],
   cashier_laundry_driver: [
     'dashboard',
     'orders',
@@ -59,9 +64,11 @@ const ROLE_PERMISSION_MAP: Record<RoleCode, readonly string[]> = {
     'delivery',
     'notification',
     'customer_service',
+    'storage',
+    'wallet',
   ],
-  laundry: ['ironing', 'attendance', 'notification'],
-  driver: ['pickup', 'delivery', 'attendance', 'notification'],
+  laundry: ['ironing', 'attendance', 'notification', 'storage'],
+  driver: ['pickup', 'delivery', 'attendance', 'notification', 'storage'],
 };
 
 const PAYMENT_METHODS = [
@@ -305,6 +312,68 @@ async function main() {
       });
     }
 
+    const defaultPerfumes = [
+      { code: 'FRESH', name: 'Fresh Breeze', extraPrice: 0, displayOrder: 1 },
+      { code: 'LAVENDER', name: 'Lavender', extraPrice: 5000, displayOrder: 2 },
+      { code: 'VANILLA', name: 'Vanilla', extraPrice: 5000, displayOrder: 3 },
+    ];
+
+    for (const perfume of defaultPerfumes) {
+      await tx.laundryPerfume.upsert({
+        where: { code: perfume.code },
+        create: perfume,
+        update: {
+          name: perfume.name,
+          extraPrice: perfume.extraPrice,
+          displayOrder: perfume.displayOrder,
+          isActive: true,
+          deletedAt: null,
+        },
+      });
+    }
+
+    const defaultMissions = [
+      {
+        code: 'QUIZ_KENALI_YELO',
+        type: 'quiz' as const,
+        title: 'Kenali Yelo Laundry',
+        description: 'Selesaikan 3 pertanyaan',
+        rewardPoints: 50,
+        sortOrder: 1,
+      },
+      {
+        code: 'LINK_ACCOUNT',
+        type: 'link_account' as const,
+        title: 'Tautkan akun',
+        description: 'Hubungkan akunmu dan dapatkan poin',
+        rewardPoints: 100,
+        sortOrder: 2,
+      },
+      {
+        code: 'REFER_FRIEND',
+        type: 'refer_friend' as const,
+        title: 'Ajak Teman',
+        description: 'Temanmu melakukan top up minimal Rp10.000',
+        rewardPoints: 1,
+        sortOrder: 3,
+      },
+    ];
+
+    for (const mission of defaultMissions) {
+      await tx.loyaltyMission.upsert({
+        where: { code: mission.code },
+        create: mission,
+        update: {
+          title: mission.title,
+          description: mission.description,
+          rewardPoints: mission.rewardPoints,
+          sortOrder: mission.sortOrder,
+          isActive: true,
+          deletedAt: null,
+        },
+      });
+    }
+
     const passwordHash = await bcrypt.hash(DEFAULT_OWNER_PASSWORD, BCRYPT_ROUNDS);
 
     async function upsertDevEmployee(input: {
@@ -398,20 +467,28 @@ async function main() {
     });
   });
 
+  await seedStorageLockersAndBoxes(prisma);
+  const rewardCatalog = await seedYeloRewardCatalog(prisma);
+
   console.log('✅ Master data seeded successfully');
   console.log('   • 6 roles');
-  console.log('   • 13 permissions with role assignments');
+  console.log('   • 14 permissions with role assignments');
   console.log('   • 4 payment methods');
   console.log('   • 8 expense categories');
   console.log('   • 6 service categories + 8 services + default service prices');
   console.log('   • Default attendance setting');
   console.log('   • Queue, receipt, and company settings');
+  console.log('   • Default perfumes and loyalty missions');
+  console.log(
+    `   • YeLo Rewards catalog (${rewardCatalog.upserted}): ${rewardCatalog.codes.join(', ')}`,
+  );
   console.log('   • Default development accounts (password: admin123)');
   console.log('     - Owner: 081234567890');
   console.log('     - Kasir Operasional: 081234567891');
   console.log('     - Kasir + Binatu: 081234567892');
   console.log('     - Manajer + Driver: 081234567893');
   console.log('     - Binatu: 081234567894');
+  console.log('   • 3 storage lockers (39 boxes: A=9, B=15, C=15)');
 }
 
 main()
