@@ -7,10 +7,61 @@ import {
 } from '@nestjs/common';
 import { Prisma, PrismaClient } from '@prisma/client';
 
+export type DatabaseUrlDiagnostics = {
+  present: boolean;
+  parseable: boolean;
+  protocol: string | null;
+  username: string | null;
+  hostname: string | null;
+  port: string | null;
+  database: string | null;
+  hasPgbouncer: boolean;
+  hasSslmodeRequire: boolean;
+  looksLikePooler: boolean;
+  passwordPresent: boolean;
+};
+
+export type PrismaConnectionFailureKind =
+  | 'auth_failed'
+  | 'unreachable'
+  | 'timeout'
+  | 'pooler_prepared_statement'
+  | 'ssl'
+  | 'malformed_url'
+  | 'unknown';
+
 /**
- * Adapt DATABASE_URL for Prisma without mutating Railway env.
- * Supabase (and similar) transaction poolers require pgbouncer=true or
- * prepared-statement queries fail after connect and surface as opaque 500s.
+ * Append a query param without re-serializing userinfo.
+ * Using `new URL(...).toString()` can corrupt passwords that contain
+ * reserved characters and break production auth against Postgres.
+ */
+export function appendQueryParam(
+  raw: string,
+  key: string,
+  value: string,
+): string {
+  if (hasQueryParam(raw, key)) {
+    return raw;
+  }
+  const separator = raw.includes('?') ? '&' : '?';
+  return `${raw}${separator}${key}=${encodeURIComponent(value)}`;
+}
+
+export function hasQueryParam(raw: string, key: string): boolean {
+  const queryIndex = raw.indexOf('?');
+  if (queryIndex < 0) {
+    return false;
+  }
+  const query = raw.slice(queryIndex + 1);
+  return query.split('&').some((part) => {
+    const [name] = part.split('=', 1);
+    return decodeURIComponent(name) === key;
+  });
+}
+
+/**
+ * Adapt DATABASE_URL for Prisma without mutating Railway Variables and without
+ * rewriting username/password via URL serialization.
  */
 export function resolvePrismaDatabaseUrl(
   raw: string | undefined = process.env.DATABASE_URL,
@@ -19,41 +70,205 @@ export function resolvePrismaDatabaseUrl(
     return raw;
   }
 
-  try {
-    const normalized = raw.replace(/^postgresql:/i, 'postgres:');
-    const url = new URL(normalized);
-    const host = url.hostname.toLowerCase();
-    const isPooler =
-      host.includes('pooler.') ||
-      host.includes('-pooler.') ||
-      url.port === '6543';
-
-    if (isPooler && url.searchParams.get('pgbouncer') !== 'true') {
-      url.searchParams.set('pgbouncer', 'true');
-    }
-
-    if (!url.searchParams.has('sslmode') && host.includes('supabase')) {
-      url.searchParams.set('sslmode', 'require');
-    }
-
-    return url.toString().replace(/^postgres:/, 'postgresql:');
-  } catch {
+  const diagnostics = inspectDatabaseUrl(raw);
+  if (!diagnostics.parseable || !diagnostics.hostname) {
     return raw;
   }
+
+  let resolved = raw.trim();
+  const host = diagnostics.hostname.toLowerCase();
+  const isPooler =
+    diagnostics.looksLikePooler ||
+    host.includes('pooler.') ||
+    diagnostics.port === '6543';
+
+  if (isPooler && !diagnostics.hasPgbouncer) {
+    resolved = appendQueryParam(resolved, 'pgbouncer', 'true');
+  }
+
+  if (host.includes('supabase') && !hasQueryParam(resolved, 'sslmode')) {
+    resolved = appendQueryParam(resolved, 'sslmode', 'require');
+  }
+
+  return resolved;
+}
+
+export function inspectDatabaseUrl(
+  raw: string | undefined = process.env.DATABASE_URL,
+): DatabaseUrlDiagnostics {
+  if (!raw?.trim()) {
+    return {
+      present: false,
+      parseable: false,
+      protocol: null,
+      username: null,
+      hostname: null,
+      port: null,
+      database: null,
+      hasPgbouncer: false,
+      hasSslmodeRequire: false,
+      looksLikePooler: false,
+      passwordPresent: false,
+    };
+  }
+
+  try {
+    // Parse without reconstructing the secret-bearing URL.
+    const match = raw
+      .trim()
+      .match(
+        /^(?<protocol>postgres(?:ql)?):\/\/(?:(?<username>[^:/?#\[\]]+)(?::(?<password>[^@]*))?@)?(?<hostname>\[[^\]]+\]|[^:/?#]+)(?::(?<port>\d+))?(?:\/(?<database>[^?]*))?(?:\?(?<query>.*))?$/i,
+      );
+
+    if (!match?.groups) {
+      return {
+        present: true,
+        parseable: false,
+        protocol: null,
+        username: null,
+        hostname: null,
+        port: null,
+        database: null,
+        hasPgbouncer: hasQueryParam(raw, 'pgbouncer'),
+        hasSslmodeRequire:
+          hasQueryParam(raw, 'sslmode') &&
+          /(?:^|[?&])sslmode=require(?:&|$)/i.test(raw),
+        looksLikePooler: false,
+        passwordPresent: false,
+      };
+    }
+
+    const protocol = match.groups.protocol ?? null;
+    const username = match.groups.username
+      ? decodeURIComponent(match.groups.username)
+      : null;
+    const hostname = match.groups.hostname ?? null;
+    const port = match.groups.port ?? (hostname ? '5432' : null);
+    const database = match.groups.database
+      ? decodeURIComponent(match.groups.database)
+      : null;
+    const passwordPresent = typeof match.groups.password === 'string';
+    const hasPgbouncer =
+      hasQueryParam(raw, 'pgbouncer') &&
+      /(?:^|[?&])pgbouncer=true(?:&|$)/i.test(raw);
+    const hasSslmodeRequire =
+      hasQueryParam(raw, 'sslmode') &&
+      /(?:^|[?&])sslmode=require(?:&|$)/i.test(raw);
+    const looksLikePooler = Boolean(
+      hostname &&
+        (hostname.toLowerCase().includes('pooler.') ||
+          hostname.toLowerCase().includes('-pooler.') ||
+          port === '6543'),
+    );
+
+    return {
+      present: true,
+      parseable: true,
+      protocol,
+      username,
+      hostname,
+      port,
+      database,
+      hasPgbouncer,
+      hasSslmodeRequire,
+      looksLikePooler,
+      passwordPresent,
+    };
+  } catch {
+    return {
+      present: true,
+      parseable: false,
+      protocol: null,
+      username: null,
+      hostname: null,
+      port: null,
+      database: null,
+      hasPgbouncer: false,
+      hasSslmodeRequire: false,
+      looksLikePooler: false,
+      passwordPresent: false,
+    };
+  }
+}
+
+export function formatDatabaseUrlDiagnostics(
+  diagnostics: DatabaseUrlDiagnostics = inspectDatabaseUrl(),
+): string {
+  return [
+    `present=${diagnostics.present}`,
+    `parseable=${diagnostics.parseable}`,
+    `protocol=${diagnostics.protocol ?? '-'}`,
+    `username=${diagnostics.username ?? '-'}`,
+    `hostname=${diagnostics.hostname ?? '-'}`,
+    `port=${diagnostics.port ?? '-'}`,
+    `database=${diagnostics.database ?? '-'}`,
+    `passwordPresent=${diagnostics.passwordPresent}`,
+    `pgbouncer=${diagnostics.hasPgbouncer}`,
+    `sslmode_require=${diagnostics.hasSslmodeRequire}`,
+    `looksLikePooler=${diagnostics.looksLikePooler}`,
+  ].join(' ');
 }
 
 export function databaseHostFingerprint(
   raw: string | undefined = process.env.DATABASE_URL,
 ): string {
-  if (!raw) {
-    return '(missing)';
+  const diagnostics = inspectDatabaseUrl(raw);
+  if (!diagnostics.parseable || !diagnostics.hostname) {
+    return diagnostics.present ? '(unparseable)' : '(missing)';
   }
-  try {
-    const url = new URL(raw.replace(/^postgresql:/i, 'postgres:'));
-    return `${url.hostname}:${url.port || '5432'}/${(url.pathname || '/').replace(/^\//, '').split('?')[0] || 'db'}`;
-  } catch {
-    return '(unparseable)';
+  return `${diagnostics.hostname}:${diagnostics.port ?? '5432'}/${diagnostics.database || 'db'}`;
+}
+
+export function classifyPrismaConnectionError(
+  error: unknown,
+): PrismaConnectionFailureKind {
+  const message = (
+    error instanceof Error ? error.message : String(error)
+  ).toLowerCase();
+
+  if (
+    message.includes('authentication failed') ||
+    message.includes('credentials') ||
+    message.includes('password authentication failed') ||
+    message.includes('28p01')
+  ) {
+    return 'auth_failed';
   }
+  if (
+    message.includes('ssl') ||
+    message.includes('certificate') ||
+    message.includes('tls')
+  ) {
+    return 'ssl';
+  }
+  if (
+    message.includes('prepared statement') ||
+    message.includes('pgbouncer')
+  ) {
+    return 'pooler_prepared_statement';
+  }
+  if (
+    message.includes('timed out') ||
+    message.includes('timeout') ||
+    message.includes('p1008') ||
+    message.includes('p2024')
+  ) {
+    return 'timeout';
+  }
+  if (
+    message.includes("can't reach database") ||
+    message.includes('p1001') ||
+    message.includes('enotfound') ||
+    message.includes('econnrefused') ||
+    message.includes('server has closed the connection') ||
+    message.includes('p1017')
+  ) {
+    return 'unreachable';
+  }
+  if (message.includes('invalid connection string') || message.includes('malformed')) {
+    return 'malformed_url';
+  }
+  return 'unknown';
 }
 
 export function isPrismaConnectionError(error: unknown): boolean {
@@ -72,6 +287,9 @@ export function isPrismaConnectionError(error: unknown): boolean {
       message.includes("can't reach database") ||
       message.includes('connection') ||
       message.includes('timed out') ||
+      message.includes('timeout') ||
+      message.includes('authentication failed') ||
+      message.includes('credentials') ||
       message.includes('server has closed the connection') ||
       message.includes('prepared statement')
     );
@@ -101,16 +319,26 @@ export class PrismaService
   }
 
   async onModuleInit(): Promise<void> {
-    const host = databaseHostFingerprint();
-    this.logger.log(`Prisma connecting (host=${host})`);
+    const diagnostics = inspectDatabaseUrl(process.env.DATABASE_URL);
+    this.logger.log(
+      `Prisma DATABASE_URL diagnostics: ${formatDatabaseUrlDiagnostics(diagnostics)}`,
+    );
+    this.logger.log(
+      `Prisma resolved URL flags: ${formatDatabaseUrlDiagnostics(
+        inspectDatabaseUrl(resolvePrismaDatabaseUrl(process.env.DATABASE_URL)),
+      )}`,
+    );
+
     try {
       await this.connectWithRetry();
-      this.logger.log(`Prisma connected (host=${host})`);
+      this.logger.log(
+        `Prisma connected (${databaseHostFingerprint()})`,
+      );
     } catch (error: unknown) {
+      const kind = classifyPrismaConnectionError(error);
       const message = error instanceof Error ? error.message : String(error);
-      // Do not block HTTP listen forever; login/health will retry via ensureConnected.
       this.logger.error(
-        `Prisma initial connect failed (host=${host}): ${message}`,
+        `Prisma initial connect failed kind=${kind} host=${databaseHostFingerprint()}: ${message}`,
       );
     }
   }
@@ -135,10 +363,6 @@ export class PrismaService
     }
   }
 
-  /**
-   * Ensure a live connection before auth/critical queries.
-   * Reconnects after idle pooler drops without logging secrets.
-   */
   async ensureConnected(): Promise<void> {
     try {
       await this.$queryRaw`SELECT 1`;
@@ -147,8 +371,9 @@ export class PrismaService
       if (!isPrismaConnectionError(error)) {
         throw error;
       }
+      const kind = classifyPrismaConnectionError(error);
       this.logger.warn(
-        `Prisma connectivity check failed; reconnecting (host=${databaseHostFingerprint()})`,
+        `Prisma connectivity check failed kind=${kind}; reconnecting (${databaseHostFingerprint()})`,
       );
       await this.connectWithRetry();
     }
@@ -167,11 +392,16 @@ export class PrismaService
           return;
         } catch (error: unknown) {
           lastError = error;
+          const kind = classifyPrismaConnectionError(error);
           const message =
             error instanceof Error ? error.message : String(error);
           this.logger.warn(
-            `Prisma $connect attempt ${attempt}/${maxAttempts} failed: ${message}`,
+            `Prisma $connect attempt ${attempt}/${maxAttempts} kind=${kind}: ${message}`,
           );
+          // Auth failures will not recover by retrying the same credentials.
+          if (kind === 'auth_failed' || kind === 'malformed_url') {
+            break;
+          }
           await new Promise((resolve) => setTimeout(resolve, attempt * 500));
         }
       }
