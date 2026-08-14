@@ -70,3 +70,5 @@ prisma/*.db
 prisma/*.db-journal
 
 backups/
+.vercel
+.env*

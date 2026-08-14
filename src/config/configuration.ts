@@ -3,7 +3,7 @@ export default () => ({
     name: process.env.APP_NAME ?? 'Yelo Laundry ERP',
     env: process.env.APP_ENV ?? 'development',
     host: process.env.APP_HOST ?? '0.0.0.0',
-    port: parseInt(process.env.APP_PORT ?? '3000', 10),
+    port: parseInt(process.env.PORT ?? process.env.APP_PORT ?? '3000', 10),
     apiPrefix: process.env.API_PREFIX ?? 'api/v1',
     corsOrigins: (process.env.CORS_ORIGINS ??
       'http://localhost:3000,http://localhost:3001,http://localhost:5173')
