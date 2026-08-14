@@ -1,6 +1,9 @@
-import { Injectable } from '@nestjs/common';
-import { EmployeeStatus } from '@prisma/client';
-import { PrismaService } from '../database/prisma/prisma.service';
+import { Injectable, Logger } from '@nestjs/common';
+import { EmployeeStatus, Prisma } from '@prisma/client';
+import {
+  formatPrismaErrorForLog,
+  PrismaService,
+} from '../database/prisma/prisma.service';
 
 export const employeeWithRolesInclude = {
   employeeRoles: {
@@ -9,7 +12,10 @@ export const employeeWithRolesInclude = {
       role: {
         include: {
           rolePermissions: {
-            where: { deletedAt: null },
+            where: {
+              deletedAt: null,
+              permission: { deletedAt: null, isActive: true },
+            },
             include: {
               permission: true,
             },
@@ -18,24 +24,65 @@ export const employeeWithRolesInclude = {
       },
     },
   },
-} as const;
+} satisfies Prisma.EmployeeInclude;
+
+export type EmployeeWithRoles = Prisma.EmployeeGetPayload<{
+  include: typeof employeeWithRolesInclude;
+}>;
 
 @Injectable()
 export class AuthRepository {
+  private readonly logger = new Logger(AuthRepository.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
-  async findEmployeeByPhone(phone: string) {
+  async findEmployeeByPhone(phone: string): Promise<EmployeeWithRoles | null> {
     await this.prisma.ensureConnected();
-    return this.prisma.employee.findFirst({
-      where: {
-        phone,
-        deletedAt: null,
-      },
-      include: employeeWithRolesInclude,
-    });
+    this.logger.log('AuthRepository stage=employee_lookup_by_phone start');
+    try {
+      // Two-step lookup: identity first, then RBAC graph.
+      // Keeps login usable even if nested include SQL fails (schema/pooler),
+      // and surfaces the exact failing Prisma stage in logs.
+      const identity = await this.prisma.employee.findFirst({
+        where: {
+          phone,
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+
+      if (!identity) {
+        this.logger.log(
+          'AuthRepository stage=employee_lookup_by_phone end found=false',
+        );
+        return null;
+      }
+
+      const employee = await this.prisma.employee.findFirst({
+        where: {
+          id: identity.id,
+          deletedAt: null,
+        },
+        include: employeeWithRolesInclude,
+      });
+
+      this.logger.log(
+        `AuthRepository stage=employee_lookup_by_phone end found=${Boolean(
+          employee,
+        )} roleCount=${employee?.employeeRoles?.length ?? 0}`,
+      );
+      return employee;
+    } catch (error: unknown) {
+      this.logger.error(
+        `AuthRepository stage=employee_lookup_by_phone failed ${formatPrismaErrorForLog(
+          error,
+        )}`,
+      );
+      throw error;
+    }
   }
 
-  async findEmployeeById(id: string) {
+  async findEmployeeById(id: string): Promise<EmployeeWithRoles | null> {
     await this.prisma.ensureConnected();
     return this.prisma.employee.findFirst({
       where: {

@@ -8,8 +8,12 @@ import { JwtService } from '@nestjs/jwt';
 import { EmployeeStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { ApiSuccessResponse } from '../common/interfaces/api-response.interface';
-import { isPrismaConnectionError } from '../database/prisma/prisma.service';
-import { AuthRepository } from './auth.repository';
+import {
+  formatPrismaErrorForLog,
+  isPrismaConnectionError,
+  isPrismaSchemaMismatchError,
+} from '../database/prisma/prisma.service';
+import { AuthRepository, EmployeeWithRoles } from './auth.repository';
 import { LoginDto } from './dto/login.dto';
 import { LoginResponseDto } from './dto/login-response.dto';
 import { ProfileResponseDto } from './dto/profile-response.dto';
@@ -47,28 +51,32 @@ export class AuthService {
 
   async login(dto: LoginDto): Promise<ApiSuccessResponse<LoginResponseDto>> {
     const phone = normalizePhone(dto.phone);
+    this.logger.log(`Login stage=start phone=${phone}`);
     this.logger.log(`Login stage=normalize_phone phone=${phone}`);
 
-    let employee;
+    let employee: EmployeeWithRoles | null;
     try {
+      this.logger.log(`Login stage=lookup_employee start phone=${phone}`);
       employee = await this.authRepository.findEmployeeByPhone(phone);
       this.logger.log(
-        `Login stage=lookup_employee found=${Boolean(employee)} phone=${phone}`,
+        `Login stage=lookup_employee end found=${Boolean(employee)} phone=${phone}`,
       );
     } catch (error: unknown) {
+      this.logger.error(
+        `Login stage=lookup_employee failed phone=${phone} ${formatPrismaErrorForLog(
+          error,
+        )}`,
+      );
       if (isPrismaConnectionError(error)) {
-        this.logger.error(
-          `Login stage=lookup_employee database_unavailable phone=${phone}`,
-        );
         throw new ServiceUnavailableException(
           'Database temporarily unavailable. Please try again.',
         );
       }
-      this.logger.error(
-        `Login stage=lookup_employee unexpected_error phone=${phone}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
+      if (isPrismaSchemaMismatchError(error)) {
+        throw new ServiceUnavailableException(
+          'Database schema is not ready. Please try again shortly.',
+        );
+      }
       throw error;
     }
 
@@ -84,8 +92,16 @@ export class AuthService {
       throw new UnauthorizedException('Invalid phone number or password');
     }
 
+    // Drop soft-deleted / inactive role rows before RBAC extraction.
+    const activeEmployeeRoles = employee.employeeRoles.filter(
+      (employeeRole) =>
+        employeeRole.role != null &&
+        employeeRole.role.deletedAt == null &&
+        employeeRole.role.isActive,
+    );
+
     this.logger.log(
-      `Login stage=verify_password employeeId=${employee.id} hasPasswordHash=${Boolean(
+      `Login stage=verify_password start employeeId=${employee.id} hasPasswordHash=${Boolean(
         employee.passwordHash,
       )}`,
     );
@@ -99,10 +115,14 @@ export class AuthService {
     } catch {
       // Corrupt/non-bcrypt hash must not become a 500.
       this.logger.warn(
-        `Login stage=verify_password hash_compare_failed employeeId=${employee.id}`,
+        `Login stage=verify_password end hash_compare_failed employeeId=${employee.id}`,
       );
       throw new UnauthorizedException('Invalid phone number or password');
     }
+
+    this.logger.log(
+      `Login stage=verify_password end valid=${isPasswordValid} employeeId=${employee.id}`,
+    );
 
     if (!isPasswordValid) {
       this.logger.warn(
@@ -111,12 +131,14 @@ export class AuthService {
       throw new UnauthorizedException('Invalid phone number or password');
     }
 
-    this.logger.log(`Login stage=extract_roles employeeId=${employee.id}`);
+    this.logger.log(
+      `Login stage=extract_roles start employeeId=${employee.id} roleRowCount=${activeEmployeeRoles.length}`,
+    );
     let roles;
     let permissions;
     try {
-      roles = extractRoles(employee.employeeRoles);
-      permissions = extractPermissions(employee.employeeRoles);
+      roles = extractRoles(activeEmployeeRoles);
+      permissions = extractPermissions(activeEmployeeRoles);
     } catch (error: unknown) {
       this.logger.error(
         `Login stage=extract_roles failed employeeId=${employee.id}: ${
@@ -125,9 +147,12 @@ export class AuthService {
       );
       throw error;
     }
+    this.logger.log(
+      `Login stage=extract_roles end employeeId=${employee.id} roleCount=${roles.length} permissionCount=${permissions.length}`,
+    );
 
     this.logger.log(
-      `Login stage=sign_jwt employeeId=${employee.id} roleCount=${roles.length} permissionCount=${permissions.length}`,
+      `Login stage=sign_jwt start employeeId=${employee.id} roleCount=${roles.length}`,
     );
 
     let accessToken: string;
@@ -149,8 +174,9 @@ export class AuthService {
         'Authentication service temporarily unavailable. Please try again.',
       );
     }
+    this.logger.log(`Login stage=sign_jwt end employeeId=${employee.id}`);
 
-    this.logger.log(`Login successful for employee ${employee.id}`);
+    this.logger.log(`Login stage=success employeeId=${employee.id}`);
 
     return {
       success: true,

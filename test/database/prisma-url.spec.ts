@@ -1,10 +1,14 @@
+import { Prisma } from '@prisma/client';
 import {
   appendQueryParam,
   classifyPrismaConnectionError,
   databaseHostFingerprint,
   formatDatabaseUrlDiagnostics,
+  formatPrismaErrorForLog,
   hasQueryParam,
   inspectDatabaseUrl,
+  isPrismaConnectionError,
+  isPrismaSchemaMismatchError,
   resolvePrismaDatabaseUrl,
 } from '../../src/database/prisma/prisma.service';
 
@@ -101,5 +105,63 @@ describe('classifyPrismaConnectionError', () => {
         ),
       ),
     ).toBe('auth_failed');
+  });
+});
+
+describe('isPrismaConnectionError', () => {
+  it('does not treat generic query errors containing "connection" as DB-down', () => {
+    expect(
+      isPrismaConnectionError(
+        new Error('Invalid connection string format in application config docs'),
+      ),
+    ).toBe(false);
+    expect(
+      isPrismaConnectionError(
+        new Error('The table `public.employees` does not exist in the current database.'),
+      ),
+    ).toBe(false);
+  });
+
+  it('treats initialization errors as DB-down', () => {
+    const error = Object.assign(new Error('Authentication failed'), {
+      name: 'PrismaClientInitializationError',
+      errorCode: 'P1000',
+    });
+    Object.setPrototypeOf(
+      error,
+      Prisma.PrismaClientInitializationError.prototype,
+    );
+    expect(isPrismaConnectionError(error)).toBe(true);
+  });
+
+  it('treats known pool timeout codes as DB-down', () => {
+    const error = new Prisma.PrismaClientKnownRequestError(
+      'Timed out fetching a new connection from the connection pool.',
+      { code: 'P2024', clientVersion: '6.19.3' },
+    );
+    expect(isPrismaConnectionError(error)).toBe(true);
+  });
+});
+
+describe('isPrismaSchemaMismatchError', () => {
+  it('detects missing table codes', () => {
+    const error = new Prisma.PrismaClientKnownRequestError(
+      'The table `public.employees` does not exist in the current database.',
+      { code: 'P2021', clientVersion: '6.19.3' },
+    );
+    expect(isPrismaSchemaMismatchError(error)).toBe(true);
+    expect(isPrismaConnectionError(error)).toBe(false);
+  });
+});
+
+describe('formatPrismaErrorForLog', () => {
+  it('never includes connection URLs', () => {
+    const formatted = formatPrismaErrorForLog(
+      new Error(
+        'Failed postgresql://user:secret@host:5432/db with credentials',
+      ),
+    );
+    expect(formatted).toContain('postgresql://***');
+    expect(formatted).not.toContain('secret');
   });
 });

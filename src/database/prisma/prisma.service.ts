@@ -276,30 +276,92 @@ export function classifyPrismaConnectionError(
   return 'unknown';
 }
 
+/** True connectivity / auth / pool failures — NOT query/schema bugs. */
+const PRISMA_CONNECTION_ERROR_CODES = new Set([
+  'P1000', // auth failed
+  'P1001', // can't reach
+  'P1002', // timed out reaching
+  'P1003', // database does not exist at path (sqlite) / similar
+  'P1008', // operations timed out
+  'P1009', // database already exists
+  'P1010', // user denied access
+  'P1011', // TLS error
+  'P1017', // server closed connection
+  'P2024', // timed out fetching connection from pool
+]);
+
+const PRISMA_SCHEMA_MISMATCH_CODES = new Set([
+  'P2021', // table does not exist
+  'P2022', // column does not exist
+]);
+
+/**
+ * Safe one-line Prisma error summary for logs (no URLs/secrets).
+ */
+export function formatPrismaErrorForLog(error: unknown): string {
+  const name =
+    error instanceof Error
+      ? error.constructor?.name || error.name || 'Error'
+      : typeof error;
+  const code =
+    error && typeof error === 'object' && 'code' in error
+      ? String((error as { code?: unknown }).code ?? '') || null
+      : null;
+  const message = (error instanceof Error ? error.message : String(error))
+    .replace(/postgresql:\/\/[^\s]+/gi, 'postgresql://***')
+    .replace(/postgres:\/\/[^\s]+/gi, 'postgres://***')
+    .replace(/password=[^&\s]+/gi, 'password=***')
+    .split('\n')[0]
+    .slice(0, 300);
+  return `name=${name} code=${code ?? '-'} message=${message}`;
+}
+
+/**
+ * Only genuine transport/auth/pool failures.
+ * Do NOT treat generic Error messages containing "connection" as DB-down —
+ * that previously hid schema/query bugs behind HTTP 503.
+ */
 export function isPrismaConnectionError(error: unknown): boolean {
   if (error instanceof Prisma.PrismaClientInitializationError) {
     return true;
   }
-  if (error instanceof Prisma.PrismaClientKnownRequestError) {
-    return ['P1001', 'P1002', 'P1008', 'P1017', 'P2024'].includes(error.code);
-  }
   if (error instanceof Prisma.PrismaClientRustPanicError) {
     return true;
   }
-  if (error instanceof Error) {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    return PRISMA_CONNECTION_ERROR_CODES.has(error.code);
+  }
+  if (error instanceof Prisma.PrismaClientUnknownRequestError) {
     const message = error.message.toLowerCase();
     return (
       message.includes("can't reach database") ||
-      message.includes('connection') ||
-      message.includes('timed out') ||
-      message.includes('timeout') ||
-      message.includes('authentication failed') ||
-      message.includes('credentials') ||
       message.includes('server has closed the connection') ||
-      message.includes('prepared statement')
+      message.includes('connection reset') ||
+      message.includes('connection refused') ||
+      message.includes('econnrefused') ||
+      message.includes('enotfound') ||
+      message.includes('timed out fetching a new connection') ||
+      message.includes('authentication failed') ||
+      (message.includes('prepared statement') &&
+        message.includes('does not exist'))
     );
   }
   return false;
+}
+
+/** Missing tables/columns — usually migrations not applied. */
+export function isPrismaSchemaMismatchError(error: unknown): boolean {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    return PRISMA_SCHEMA_MISMATCH_CODES.has(error.code);
+  }
+  const message = (
+    error instanceof Error ? error.message : String(error)
+  ).toLowerCase();
+  return (
+    message.includes('does not exist in the current database') ||
+    (message.includes('the table') && message.includes('does not exist')) ||
+    (message.includes('the column') && message.includes('does not exist'))
+  );
 }
 
 @Injectable()

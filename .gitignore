@@ -72,3 +72,6 @@ prisma/*.db-journal
 backups/
 .vercel
 .env*
+
+# Local tooling binaries
+.tools/

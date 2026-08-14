@@ -44,6 +44,12 @@ class EnvironmentVariables {
   @IsNumber()
   @Min(1)
   @IsOptional()
+  PORT?: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  @IsOptional()
   APP_PORT?: number;
 
   @IsString()

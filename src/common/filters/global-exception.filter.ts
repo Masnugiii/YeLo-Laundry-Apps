@@ -8,7 +8,11 @@ import {
 } from '@nestjs/common';
 import { Response } from 'express';
 import { ApiErrorResponse } from '../interfaces/api-response.interface';
-import { isPrismaConnectionError } from '../../database/prisma/prisma.service';
+import {
+  formatPrismaErrorForLog,
+  isPrismaConnectionError,
+  isPrismaSchemaMismatchError,
+} from '../../database/prisma/prisma.service';
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
@@ -49,9 +53,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     if (isPrismaConnectionError(exception)) {
       this.logger.error(
-        `Database unavailable: ${
-          exception instanceof Error ? exception.message : String(exception)
-        }`,
+        `Database unavailable: ${formatPrismaErrorForLog(exception)}`,
       );
       response.status(HttpStatus.SERVICE_UNAVAILABLE).json({
         success: false,
@@ -61,8 +63,22 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       return;
     }
 
+    if (isPrismaSchemaMismatchError(exception)) {
+      this.logger.error(
+        `Database schema mismatch: ${formatPrismaErrorForLog(exception)}`,
+      );
+      response.status(HttpStatus.SERVICE_UNAVAILABLE).json({
+        success: false,
+        message: 'Database schema is not ready. Please try again shortly.',
+        errors: {},
+      } satisfies ApiErrorResponse);
+      return;
+    }
+
     this.logger.error(
-      exception instanceof Error ? exception.message : 'Unknown error',
+      exception instanceof Error
+        ? `${exception.message} ${formatPrismaErrorForLog(exception)}`
+        : `Unknown error ${formatPrismaErrorForLog(exception)}`,
       exception instanceof Error ? exception.stack : undefined,
     );
 
